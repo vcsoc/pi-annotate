@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'">
+<title>Annotate Console</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<section id="toolbar" hidden>
+  <header class="drag console-title"><strong>✎ Annotate Console</strong><span id="shortcut" class="muted"></span><button id="close-console" class="icon" aria-label="Close Annotate Console">×</button></header>
+  <div class="console-actions"><button id="capture" class="primary">＋ Capture</button><select id="capture-kind" aria-label="Mark tool"><option value="rectangle">▭ Area</option><option value="freehand">✎ Freehand</option></select><button id="clear" class="action-icon" title="Discard all annotations" aria-label="Discard all annotations">🗑</button><button id="send" class="primary action-icon" title="Send all annotations" aria-label="Send all annotations" disabled><span aria-hidden="true">➤</span> <span id="send-count">0</span></button></div>
+  <div class="project-location"><span class="muted">Project / folder</span><span id="project"></span></div>
+  <p id="notice" role="status">Capture → mark an app area → add a note → ✓ save here. Send only when ready.</p>
+  <div id="console-body">
+    <nav id="drafts" aria-label="Saved annotations"></nav>
+    <div id="empty"><strong>No annotations yet</strong><p>Click Capture and mark an area in an app.</p><p>Each entry keeps the <b>whole app with your mark</b>, plus your note.</p></div>
+    <div id="detail" hidden><img id="entry-image" alt="Complete application screenshot with the marked area highlighted"><textarea id="entry-comment" rows="4" maxlength="8000" aria-label="Selected annotation text" placeholder="Annotation text"></textarea><span id="entry-count" class="muted"></span></div>
+  </div>
+  <footer id="privacy-warning">⚠ Send shares all annotations with this Pi session. Each image includes the <strong>entire application</strong> with your area highlighted. Review the full screenshots for sensitive information first.</footer>
+</section>
+<section id="overlay" hidden>
+  <header class="drag capture-header"><strong id="editor-title">Mark an area in this application</strong><div class="tools"><button id="rectangle" aria-pressed="true">▭ Area</button><button id="freehand" aria-pressed="false">✎ Freehand</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-fit">Fit</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="reset">Redraw</button><button id="back">Cancel</button></div></header>
+  <div id="stage"><canvas id="canvas" aria-label="Mark an area inside the full application screenshot"></canvas><div id="inline-note" hidden></div></div>
+  <footer><span id="selection-status" role="status">The complete app is retained. Draw a mark; its note opens beside it.</span><button id="crop-app" class="primary" hidden disabled>Use this whole app</button></footer>
+</section>
+<section id="note" hidden></section>
+<section id="mark" hidden><canvas id="mark-canvas"></canvas></section>
+<section id="desktop" hidden><canvas id="desktop-canvas"></canvas><div id="desktop-hint">Mark an area in an application · Esc to cancel<span id="desktop-status"></span></div></section>
+<template id="note-template"><div class="note-form"><header class="drag"><strong id="note-title">Note for marked area</strong><button id="cancel-note" class="icon" aria-label="Cancel annotation">×</button></header><div id="note-source" class="muted ellipsis"></div><textarea id="note-comment" rows="4" maxlength="8000" placeholder="What should change in this area?" aria-label="Annotation text"></textarea><div class="note-actions"><span id="note-status" role="status">Full app + highlighted area saved together.</span><button id="save-note" class="primary tick" aria-label="Save annotation" title="Save annotation (Ctrl/⌘+Enter)" disabled>✓</button></div></div></template>
+<section id="sources" hidden><header class="drag"><strong>Choose the application to annotate</strong><button id="source-cancel">Cancel</button></header><p class="muted">Choose an app from any monitor. Display fallback requires you to outline the whole app first, then mark the area within it.</p><div id="source-list"></div><p id="sources-status" role="status"></p></section>
+<section id="portal" hidden><header class="drag"><strong>Choose an application</strong></header><p>Choose the app window in your system picker. If your desktop only shares a display, identify the whole app before marking an area. No audio is captured.</p><button id="choose" class="primary">Choose app…</button><button id="portal-cancel">Cancel</button><p id="portal-status" role="status"></p></section>
+<script type="module" src="renderer.js"></script></body></html>

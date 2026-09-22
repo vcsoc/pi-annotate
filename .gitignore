@@ -1,0 +1,11 @@
+node_modules/
+.pi/
+.obsidian/
+.env
+.env.*
+*.log
+*.tgz
+.DS_Store
+coverage/
+test-results/
+playwright-report/
