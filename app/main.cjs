@@ -9,6 +9,7 @@ const { loadBounds, saveBounds } = require('./console-size.cjs');
 const { consolePlacement } = require('./console-placement.cjs');
 const { registerShortcut: registerHyprlandShortcut } = require('./hyprland-shortcut.cjs');
 const { nativeWindows, sourceForWindow } = require('./native-windows.cjs');
+const { captureMacWindow } = require('./capture-macos.cjs');
 const { selection: desktopMark, pointsInApp } = require('./desktop-selection.cjs');
 const selectors = new Map();
 let finishDesktop, cancelDesktop, desktopKind;
@@ -196,14 +197,16 @@ async function capture(options = {}) {
   if (busy()) return;
   capturing = true; captureAbort = new AbortController(); changed();
   try {
-    const { replaceId, copyId, kind = 'rectangle', preserveFocus = false } = options || {};
+    const { replaceId, copyId, kind = 'rectangle' } = options || {};
     if (!['rectangle', 'freehand'].includes(kind) || (replaceId && copyId)) throw new Error('Invalid capture request');
     const previous = (replaceId || copyId) && drafts.find(d => d.id === (replaceId || copyId));
     if ((replaceId || copyId) && !previous) throw new Error('Annotation no longer exists');
     if (!replaceId && drafts.length >= 12) throw new Error('Send or remove some annotations first (12 per batch).');
     if (consoleState) await consoleState.hide(); else toolbar.hide();
     if (quitting || captureAbort.signal.aborted) throw new Error('Capture cancelled');
-    await delay(350);
+    // macOS selector is non-activating; no screenshot or hide-settle wait
+    // is needed before showing it. Other compositors retain their settle time.
+    if (process.platform !== 'darwin') await delay(350);
     if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') === 'denied') throw new Error('Allow Pi Annotate/Electron in System Settings → Privacy & Security → Screen Recording, then restart /annotate.');
     let result, region, liveMarkPoints;
     if (backend && kind === 'rectangle') {
@@ -230,9 +233,6 @@ async function capture(options = {}) {
       }
       const candidates = backend ? await windowBoxes(backend, process.pid) : await nativeWindows(process.platform, process.pid, screen, captureAbort.signal);
       if (!candidates.length) throw new Error('No application windows are available. Check capture permission and bring the app onscreen.');
-      // Snapshot before the selection overlay steals focus. Retain only the chosen
-      // window after selection; no images are sent or persisted until explicit Send.
-      const focusedSources = preserveFocus && !backend ? await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1920 } }) : null;
       const marked = await selectOnDesktop(kind);
       const { applicationForRegion, validateMark } = await workflow;
       const target = applicationForRegion(marked.region, backend ? await windowBoxes(backend, process.pid) : candidates);
@@ -248,8 +248,12 @@ async function capture(options = {}) {
         const current = await nativeWindows(process.platform, process.pid, screen, captureAbort.signal);
         const same = current.find(w => w.nativeId === target.nativeId);
         if (!same || ['x', 'y', 'width', 'height'].some(key => Math.abs(same[key] - target[key]) > 1)) throw new Error('The marked application moved or closed during selection. Capture again.');
-        const sources = focusedSources || await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1920 } });
-        image = sourceForWindow(sources, target).thumbnail;
+        if (process.platform === 'darwin') {
+          image = nativeImage.createFromBuffer(await captureMacWindow(target.nativeId, captureAbort.signal));
+        } else {
+          const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1920 } });
+          image = sourceForWindow(sources, target).thumbnail;
+        }
       }
       result = { image, source: `${target.label} · whole application`, needsAppBounds: false, points };
     }
@@ -363,12 +367,12 @@ app.whenReady().then(async () => {
   let shortcutError;
   try {
     if (backend === 'hyprland') {
-      shortcutOwner = await registerHyprlandShortcut(info.shortcut, () => void capture({ preserveFocus: true }), error => {
+      shortcutOwner = await registerHyprlandShortcut(info.shortcut, () => void capture(), error => {
         shortcutReady = false; changed(); status(error.message);
       });
       if (quitting) { shortcutOwner.stop(); return; }
       shortcutReady = true;
-    } else shortcutReady = globalShortcut.register(info.shortcut, () => void capture({ preserveFocus: true }));
+    } else shortcutReady = globalShortcut.register(info.shortcut, () => void capture());
   } catch (error) { shortcutReady = false; shortcutError = error.message; }
   changed();
   if (shortcutError) status(shortcutError);

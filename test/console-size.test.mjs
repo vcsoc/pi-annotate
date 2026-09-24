@@ -18,9 +18,11 @@ test('Console resize persists across launches and missing preferences use defaul
     assert.deepEqual(loadSize(file), { width: 550, height: 750 });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
-test('global capture snapshots before opening the focus-taking selector', () => {
+test('capture screenshots only after selection and uses selected native macOS window', () => {
   const source = readFileSync(new URL('../app/main.cjs', import.meta.url), 'utf8');
-  assert.match(source, /capture\(\{ preserveFocus: true \}\)/);
-  assert.ok(source.indexOf('const focusedSources =') < source.indexOf('const marked = await selectOnDesktop(kind)'));
-  assert.match(source, /const sources = focusedSources \|\|/);
+  assert.doesNotMatch(source, /focusedSources|preserveFocus/);
+  const selection = source.indexOf('const marked = await selectOnDesktop(kind)');
+  assert.ok(source.indexOf('await captureMacWindow(target.nativeId') > selection);
+  assert.ok(source.indexOf("thumbnailSize: { width: 1920, height: 1920 }") > selection);
+  assert.match(source, /if \(process.platform !== 'darwin'\) await delay\(350\)/);
 });
