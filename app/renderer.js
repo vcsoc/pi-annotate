@@ -1,5 +1,6 @@
 import { normalizedPoint, validSelection, selectionBounds, drawMark } from './geometry.mjs';
 import { placeNote } from './workflow.mjs';
+import { projectLabel } from './project-label.mjs';
 const api = window.annotate;
 const $ = id => document.getElementById(id);
 const page = new URLSearchParams(location.search).get('page');
@@ -11,6 +12,12 @@ window.addEventListener('unhandledrejection', event => { event.preventDefault();
 
 if (page === 'desktop') {
   const config = await api.desktopConfig(), canvas = $('desktop-canvas'), ctx = canvas.getContext('2d');
+  if (config.background) {
+    const backdrop = new Image(); backdrop.src = config.background; await backdrop.decode();
+    backdrop.className = 'desktop-backdrop';
+    $('desktop').prepend(backdrop);
+    $('desktop-hint').firstChild.textContent = 'Screen preserved — mark the area, then add a note. ';
+  }
   let drawing = false, points = [];
   function render(mark) {
     // Selection surfaces need only a lightweight outline, not Retina-sized
@@ -45,7 +52,7 @@ if (page === 'mark') {
 }
 
 if (page === 'toolbar') {
-  let state, selectedId, refreshing = false, again = false;
+  let state, selectedId, refreshing = false, again = false, changingTarget = false;
   const selected = () => state?.drafts.find(item => item.id === selectedId);
   function select(id) {
     selectedId = id; const item = selected();
@@ -63,12 +70,30 @@ if (page === 'toolbar') {
   async function refresh() {
     if (refreshing) { again = true; return; } refreshing = true;
     try {
-      state = await api.state(); const disabled = state.sending || state.capturing;
-      $('project').textContent = state.project; $('project').title = state.project;
+      state = await api.state(); const disabled = state.sending || state.capturing || changingTarget;
+      const timed = ['hyprland', 'sway'].includes(state.backend);
+      $('capture').textContent = timed ? '＋ Capture (3s)' : '＋ Capture';
+      $('capture').title = timed ? 'Hides the Console, then waits 3 seconds so you can reopen a menu. The keyboard shortcut preserves the screen immediately.' : 'Capture an application';
+      const targets = [...state.destinations];
+      if (!targets.some(target => target.id === state.destinationId)) targets.unshift({ id: state.destinationId, project: state.project, session: '', name: 'offline' });
+      const optionsKey = JSON.stringify([targets, state.destinationId, state.destinationAvailable]);
+      if ($('project').dataset.options !== optionsKey) {
+        $('project').replaceChildren(...targets.map(target => {
+          const option = document.createElement('option'); option.value = target.id;
+          const duplicate = targets.filter(other => other.project === target.project).length > 1;
+          const detail = duplicate ? ` — ${target.name || target.session.slice(0, 8)} [${target.id.slice(0, 6)}]` : target.name === 'offline' ? ' — offline' : '';
+          option.textContent = projectLabel(target.project) + detail;
+          option.selected = target.id === state.destinationId;
+          return option;
+        }));
+        $('project').dataset.options = optionsKey;
+      }
+      $('project').value = state.destinationId;
+      $('project').title = state.project; $('project').disabled = disabled;
       $('shortcut').textContent = state.shortcutReady ? state.shortcut.replace('CommandOrControl', /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl') : 'Use Capture';
-      $('send').disabled = disabled || !state.drafts.length || state.drafts.some(d => !d.comment.trim());
+      $('send').disabled = disabled || !state.destinationAvailable || !state.drafts.length || state.drafts.some(d => !d.comment.trim());
       $('send-count').textContent = String(state.drafts.length);
-      $('send').title = state.sending ? 'Sending annotations…' : `Send all ${state.drafts.length} annotations`;
+      $('send').title = state.sending ? 'Sending annotations…' : `Send all ${state.drafts.length} annotations to ${state.project}`;
       $('send').setAttribute('aria-label', $('send').title);
       $('clear').disabled = disabled || !state.drafts.length;
       $('capture').disabled = disabled || state.drafts.length >= 12;
@@ -97,6 +122,13 @@ if (page === 'toolbar') {
     } finally { refreshing = false; if (again) { again = false; void refresh().catch(report); } }
   }
   api.onChange(() => refresh().catch(report)); api.onNotice(report);
+  $('project').addEventListener('change', async () => {
+    const id = $('project').value; changingTarget = true;
+    $('project').disabled = true; $('send').disabled = true;
+    try { await api.target(id); }
+    catch (error) { report(error); }
+    finally { changingTarget = false; await refresh().catch(report); }
+  });
   action('capture', () => api.capture({ kind: $('capture-kind').value }));
   action('clear', () => api.clear());
   action('close-console', () => api.quit());
@@ -105,17 +137,17 @@ if (page === 'toolbar') {
     item.comment = $('entry-comment').value;
     const index = state.drafts.indexOf(item), button = [...$('drafts').children].find(b => b.dataset.id === item.id);
     if (button) button.querySelector('span').textContent = `${index + 1}. ${item.comment || '(Add annotation text)'}`;
-    $('send').disabled = state.sending || state.capturing || state.drafts.some(d => !d.comment.trim());
+    $('send').disabled = changingTarget || state.sending || state.capturing || !state.destinationAvailable || state.drafts.some(d => !d.comment.trim());
     // Input IPC is issued before any later Retake/Send click, preserving edits.
     void api.comment(item.id, item.comment).catch(report);
   });
   // The persistent footer warns before Send; main closes only after delivery succeeds.
-  action('send', () => api.send());
+  action('send', () => api.send(state.destinationId));
   await refresh();
 }
 
 // Both the adjacent desktop note and the portable in-image callout use the same
-// four-line form and the same full-frame PNG compositor. The note itself is never
+// expanding multiline form and the same full-frame PNG compositor. The note itself is never
 // painted into the image; only the original app and highlighted mark are included.
 function installNote(container, getCapture) {
   container.replaceChildren($('note-template').content.cloneNode(true));

@@ -1,12 +1,17 @@
 // Real Pi registration/help check. Never runs /annotate, opens Electron, or calls a model.
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { records, request } from '../targets.mjs';
 // Defaults to testing the package manifest, not merely importing index.ts.
 // Installed-mode is for an isolated PI_CODING_AGENT_DIR with this Git package.
 const extensionArgs = process.env.ANNOTATE_TEST_INSTALLED === '1' ? [] : ['--no-extensions', '-e', fileURLToPath(new URL('../', import.meta.url))];
-const child = spawn(process.env.PI_BIN || 'pi', ['--mode', 'rpc', '--no-session', '--no-skills', '--no-prompt-templates', '--no-context-files', ...extensionArgs], { stdio: ['pipe', 'pipe', 'pipe'] });
+const registry = mkdtempSync(join(tmpdir(), 'annotate-discovery-'));
+const child = spawn(process.env.PI_BIN || 'pi', ['--mode', 'rpc', '--no-session', '--no-skills', '--no-prompt-templates', '--no-context-files', ...extensionArgs], { env: { ...process.env, PI_ANNOTATE_REGISTRY_DIR: registry }, stdio: ['pipe', 'pipe', 'pipe'] });
 const events = []; let buffer = '', errors = '', spawnError;
 child.on('error', error => { spawnError = error; });
 child.stdout.on('data', chunk => {
@@ -31,6 +36,9 @@ try {
   const commands = response.data.commands.filter(c => c.name === 'annotate');
   assert.equal(commands.length, 1, 'The package must register exactly one /annotate command');
   assert.ok(commands[0].description.includes('Annotate Console'));
+  const destinations = records(registry);
+  assert.equal(destinations.length, 1, 'Real Pi session must advertise one live destination');
+  assert.equal((await request(destinations[0], '/session')).targetId, destinations[0].id);
   send({ id: 'help', type: 'prompt', message: '/annotate help' });
   assert.equal((await wait(e => e.id === 'help')).success, true);
   await wait(e => e.type === 'extension_ui_request' && e.method === 'notify' && /entire application/.test(e.message) && /Retake/.test(e.message));
@@ -42,4 +50,5 @@ try {
     await Promise.race([new Promise(resolve => child.once('exit', resolve)), sleep(2000)]);
     if (child.exitCode === null) child.kill('SIGKILL');
   }
+  rmSync(registry, { recursive: true, force: true });
 }

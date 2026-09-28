@@ -1,10 +1,8 @@
 const { app, BrowserWindow, desktopCapturer, screen, globalShortcut, ipcMain, session, nativeImage, dialog, systemPreferences } = require('electron');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
 const { join } = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { TOOLBAR_WIDTH, TOOLBAR_HEIGHT, geometry, windowBoxes, selectRegion, nativeChoices, workAreas, ownedWindowBounds, enforceFloating } = require('./capture-adapters.cjs');
-const exec = promisify(execFile), workflow = import('./workflow.mjs');
+const { TOOLBAR_WIDTH, TOOLBAR_HEIGHT, windowBoxes, nativeChoices, workAreas, ownedWindowBounds, enforceFloating } = require('./capture-adapters.cjs');
+const workflow = import('./workflow.mjs');
 const { loadBounds, saveBounds } = require('./console-size.cjs');
 const { consolePlacement } = require('./console-placement.cjs');
 const { registerShortcut: registerHyprlandShortcut } = require('./hyprland-shortcut.cjs');
@@ -12,7 +10,8 @@ const { nativeWindows, sourceForWindow } = require('./native-windows.cjs');
 const { captureMacWindow } = require('./capture-macos.cjs');
 const { selection: desktopMark, pointsInApp } = require('./desktop-selection.cjs');
 const selectors = new Map();
-let finishDesktop, cancelDesktop, desktopKind;
+const { snapshotDesktop, waitForCapture } = require('./capture-wlroots.cjs');
+let finishDesktop, cancelDesktop, desktopKind, desktopBackdrop;
 app.setName('Pi Annotate');
 app.commandLine.appendSwitch('enable-features', 'GlobalShortcutsPortal');
 const base = process.env.PI_ANNOTATE_URL, token = process.env.PI_ANNOTATE_TOKEN;
@@ -31,6 +30,18 @@ if (ozone) app.commandLine.appendSwitch('ozone-platform', ozone);
 if (backend || (process.platform === 'linux' && !wayland)) app.commandLine.appendSwitch('force-device-scale-factor', '1');
 const windows = new Set(), delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 let consoleState, initialConsoleBounds, closingConsole = false, shortcutOwner;
+let routeState, refreshingTargets = false;
+async function refreshTargets() {
+  if (refreshingTargets || quitting || !info?.targetId) return;
+  refreshingTargets = true;
+  try {
+    const next = await api('/targets');
+    if (routeState && next.revision < routeState.revision) return;
+    if (JSON.stringify(next) !== JSON.stringify(routeState)) {
+      routeState = next; info.project = next.selected.project; changed();
+    }
+  } finally { refreshingTargets = false; }
+}
 let toolbar, overlay, noteWindow, markWindow, captureWindow, sourceWindow, info, frozen, sourceChoices = [], chooseSource, cancelSource, cancelPortal;
 let drafts = [], selectedId, batchId = randomUUID(), sending = false, capturing = false, saving = false, quitting = false, shortcutReady = false, captureAbort;
 const busy = () => quitting || closingConsole || sending || capturing || Boolean(frozen);
@@ -103,24 +114,25 @@ function openEditor() {
 async function openLiveNote(region) {
   const { placeNote } = await workflow;
   const areas = backend ? await workAreas(backend) : screen.getAllDisplays().map(d => d.workArea);
+  if (quitting || captureAbort?.signal.aborted) throw new Error('Capture cancelled');
   frozen.noteBounds = placeNote(region, areas);
   frozen.markBounds = region;
   markWindow = windowFor('mark', 'Annotate Highlight', region, true);
   noteWindow = windowFor('note', 'Annotate Note', frozen.noteBounds);
   const win = noteWindow; win.on('closed', () => { if (noteWindow === win) finishCapture('Capture cancelled. Existing annotations were kept.'); });
 }
-async function selectOnDesktop(kind) {
-  const areas = backend ? await workAreas(backend) : screen.getAllDisplays().map(d => d.bounds);
+async function selectOnDesktop(kind, backdrop) {
+  const areas = backdrop ? backdrop.areas : backend ? await workAreas(backend) : screen.getAllDisplays().map(d => d.bounds);
   if (quitting || captureAbort?.signal.aborted) throw new Error('Capture cancelled');
   if (!areas.length) throw new Error('No displays are available');
-  desktopKind = kind;
+  desktopKind = kind; desktopBackdrop = backdrop;
   return new Promise((resolve, reject) => {
     const abort = () => finish(new Error('Capture cancelled'));
     let escapeRegistered = false;
     const timer = setTimeout(() => finish(new Error('Capture selection timed out')), 120000);
     const finish = (error, result) => {
       if (finishDesktop !== finish) return;
-      finishDesktop = cancelDesktop = undefined; clearTimeout(timer);
+      finishDesktop = cancelDesktop = desktopBackdrop = undefined; clearTimeout(timer);
       if (escapeRegistered) globalShortcut.unregister('Escape');
       captureAbort?.signal.removeEventListener('abort', abort);
       const closing = [...selectors.keys()]; selectors.clear();
@@ -148,7 +160,8 @@ async function selectOnDesktop(kind) {
 function selectorFor(event) { return [...selectors.keys()].find(w => w.webContents === event.sender); }
 handle('desktop-config', event => {
   const win = selectorFor(event); if (!win) throw new Error('No desktop selection');
-  return { bounds: selectors.get(win), kind: desktopKind };
+  const bounds = selectors.get(win);
+  return { bounds, kind: desktopKind, background: desktopBackdrop?.preview(bounds) };
 });
 handle('desktop-mark', (event, points, complete) => {
   if (!selectorFor(event)) throw new Error('No desktop selection');
@@ -204,26 +217,25 @@ async function capture(options = {}) {
     if (!replaceId && drafts.length >= 12) throw new Error('Send or remove some annotations first (12 per batch).');
     if (consoleState) await consoleState.hide(); else toolbar.hide();
     if (quitting || captureAbort.signal.aborted) throw new Error('Capture cancelled');
+    if (backend) await waitForCapture(options.delayMs || 0, captureAbort.signal);
     // macOS selector is non-activating; no screenshot or hide-settle wait
     // is needed before showing it. Other compositors retain their settle time.
     if (process.platform !== 'darwin') await delay(350);
     if (process.platform === 'darwin' && systemPreferences.getMediaAccessStatus('screen') === 'denied') throw new Error('Allow Pi Annotate/Electron in System Settings → Privacy & Security → Screen Recording, then restart /annotate.');
     let result, region, liveMarkPoints;
-    if (backend && kind === 'rectangle') {
+    if (backend) {
       const boxes = await windowBoxes(backend, process.pid);
-      let selected;
-      try { selected = await selectRegion(boxes, { signal: captureAbort.signal }); }
-      catch (error) { if (error.code === 'ENOENT') throw new Error('Install slurp to mark directly on the desktop. No alternate screenshot editor was opened.'); throw error; }
-      if (selected) {
-        const { applicationForRegion, relativeMark, validateMark } = await workflow;
-        // A mark identifies its containing APP. Never crop the evidence to the mark.
-        const target = applicationForRegion(selected, await windowBoxes(backend, process.pid));
-        const points = validateMark('rectangle', relativeMark(selected, target));
-        await delay(150);
-        const screenshot = await exec('grim', ['-g', geometry(target), '-'], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 15000, signal: captureAbort.signal });
-        result = { image: nativeImage.createFromBuffer(screenshot.stdout), source: `${target.label} · whole application`, needsAppBounds: false, points: kind === 'rectangle' ? points : undefined };
-        if (kind === 'rectangle') region = selected;
-      }
+      if (!boxes.length) throw new Error('No application windows are available. Bring the app onscreen.');
+      // Preserve transient menus BEFORE any selector takes keyboard/pointer focus.
+      // Use the same frame for the desktop backdrop and whole-application evidence.
+      const frame = await snapshotDesktop(backend, { decode: buffer => nativeImage.createFromBuffer(buffer), signal: captureAbort.signal });
+      const marked = await selectOnDesktop(kind, frame);
+      const { applicationForRegion, validateMark } = await workflow;
+      const target = applicationForRegion(marked.region, boxes);
+      region = marked.region;
+      const points = validateMark(kind, pointsInApp(marked.points, target));
+      liveMarkPoints = pointsInApp(marked.points, region);
+      result = { image: frame.crop(target), source: `${target.label} · whole application (preserved before marking)`, needsAppBounds: false, points };
     } else {
       if (wayland && !backend) throw new Error('This Wayland compositor does not expose the window geometry/overlay placement needed for direct desktop marking. A compositor integration is required; Annotate will not silently switch to a different editor workflow.');
       // Resolve permission and window availability before covering the desktop.
@@ -231,32 +243,28 @@ async function capture(options = {}) {
         await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } });
         if (systemPreferences.getMediaAccessStatus('screen') !== 'granted') throw new Error('Grant Screen Recording to Pi Annotate/Electron, then restart the companion.');
       }
-      const candidates = backend ? await windowBoxes(backend, process.pid) : await nativeWindows(process.platform, process.pid, screen, captureAbort.signal);
+      const candidates = await nativeWindows(process.platform, process.pid, screen, captureAbort.signal);
       if (!candidates.length) throw new Error('No application windows are available. Check capture permission and bring the app onscreen.');
       const marked = await selectOnDesktop(kind);
       const { applicationForRegion, validateMark } = await workflow;
-      const target = applicationForRegion(marked.region, backend ? await windowBoxes(backend, process.pid) : candidates);
+      const target = applicationForRegion(marked.region, candidates);
       region = marked.region;
       const points = validateMark(kind, pointsInApp(marked.points, target));
       liveMarkPoints = pointsInApp(marked.points, region);
       await delay(250); // Remove every selector before capturing the application.
       let image;
-      if (backend) {
-        const shot = await exec('grim', ['-g', geometry(target), '-'], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 15000, signal: captureAbort.signal });
-        image = nativeImage.createFromBuffer(shot.stdout);
+      const current = await nativeWindows(process.platform, process.pid, screen, captureAbort.signal);
+      const same = current.find(w => w.nativeId === target.nativeId);
+      if (!same || ['x', 'y', 'width', 'height'].some(key => Math.abs(same[key] - target[key]) > 1)) throw new Error('The marked application moved or closed during selection. Capture again.');
+      if (process.platform === 'darwin') {
+        image = nativeImage.createFromBuffer(await captureMacWindow(target.nativeId, captureAbort.signal));
       } else {
-        const current = await nativeWindows(process.platform, process.pid, screen, captureAbort.signal);
-        const same = current.find(w => w.nativeId === target.nativeId);
-        if (!same || ['x', 'y', 'width', 'height'].some(key => Math.abs(same[key] - target[key]) > 1)) throw new Error('The marked application moved or closed during selection. Capture again.');
-        if (process.platform === 'darwin') {
-          image = nativeImage.createFromBuffer(await captureMacWindow(target.nativeId, captureAbort.signal));
-        } else {
-          const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1920 } });
-          image = sourceForWindow(sources, target).thumbnail;
-        }
+        const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1920 } });
+        image = sourceForWindow(sources, target).thumbnail;
       }
       result = { image, source: `${target.label} · whole application`, needsAppBounds: false, points };
     }
+    if (captureAbort.signal.aborted) throw new Error('Capture cancelled');
     if (!quitting) {
       const image = fit(result.image);
       frozen = { image: image.toDataURL(), size: image.getSize(), source: result.source.slice(0, 200), needsAppBounds: result.needsAppBounds, kind, points: result.points, liveMarkPoints, replaceId, comment: previous?.comment || '' };
@@ -268,8 +276,15 @@ async function capture(options = {}) {
 handle('portal-ready', async event => { if (event.sender !== captureWindow?.webContents) throw new Error('Unexpected capture sender'); captureWindow.hide(); await delay(500); });
 handle('sources', event => { if (event.sender !== sourceWindow?.webContents) throw new Error('No source picker'); return sourceChoices; });
 handle('choose-source', (event, id) => { if (event.sender !== sourceWindow?.webContents || !sourceChoices.some(s => s.id === id)) throw new Error('Invalid capture source'); chooseSource?.(id); });
-handle('state', () => ({ project: info.project, shortcut: info.shortcut, shortcutReady, selectedId, sending, capturing: capturing || Boolean(frozen), backend: backend || (wayland ? 'portal' : 'native'), drafts: drafts.map(({ image, ...item }) => ({ ...item, preview: nativeImage.createFromDataURL('data:image/png;base64,' + image).resize({ width: 700 }).toDataURL() })) }));
-handle('capture', (_event, options) => { void capture(options); });
+handle('target', async (event, id) => {
+  if (event.sender !== toolbar?.webContents) throw new Error('Only the Console can change destination');
+  requireIdle();
+  const next = await api('/target', { id });
+  routeState = { ...routeState, ...next, available: true }; info.project = next.selected.project; changed();
+  await refreshTargets();
+});
+handle('state', () => ({ project: info.project, destinationId: routeState?.selected.id || '', destinations: routeState?.targets || [{ id: '', project: info.project, session: info.session || '', name: 'current session' }], destinationAvailable: routeState?.available !== false, shortcut: info.shortcut, shortcutReady, selectedId, sending, capturing: capturing || Boolean(frozen), backend: backend || (wayland ? 'portal' : 'native'), drafts: drafts.map(({ image, ...item }) => ({ ...item, preview: nativeImage.createFromDataURL('data:image/png;base64,' + image).resize({ width: 700 }).toDataURL() })) }));
+handle('capture', (_event, options) => { void capture({ ...options, delayMs: backend ? 3000 : 0 }); });
 handle('frozen', event => { if (![overlay?.webContents, noteWindow?.webContents, markWindow?.webContents].includes(event.sender)) throw new Error('No annotation in this window'); return frozen; });
 handle('crop-app', async (event, points) => {
   if (event.sender !== overlay?.webContents || !frozen?.needsAppBounds) throw new Error('No application boundary to select');
@@ -320,12 +335,15 @@ handle('clear', async () => {
   const result = await dialog.showMessageBox(toolbar, { type: 'question', message: 'Discard all unsent annotations?', buttons: ['Keep', 'Discard'], defaultId: 0, cancelId: 0 });
   if (result.response === 1 && !busy()) { drafts = []; selectedId = undefined; batchId = randomUUID(); changed(); }
 });
-handle('send', async () => {
+handle('send', async (_event, expectedDestination) => {
   requireIdle(); if (!drafts.length) throw new Error('No annotations ready');
+  const targetId = routeState?.selected.id;
+  if (targetId && expectedDestination !== targetId) throw new Error('Destination changed. Review the project dropdown and Send again.');
+  if (routeState?.available === false) throw new Error('Selected Pi session is offline. Choose an active destination.');
   sending = true; changed();
   try {
     if (consoleState) await consoleState.remember();
-    const result = await api('/submit', { id: batchId, items: drafts });
+    const result = await api('/submit', { id: batchId, items: drafts, targetId });
     drafts = []; selectedId = undefined; batchId = randomUUID();
     // Keep controls locked and acknowledge Send before closing its IPC window.
     setImmediate(() => { quitting = true; app.quit(); });
@@ -335,8 +353,11 @@ handle('send', async () => {
 handle('quit', () => toolbar.close());
 app.whenReady().then(async () => {
   info = await api('/session');
-  screen.on('display-removed', () => cancelDesktop?.());
-  screen.on('display-metrics-changed', () => cancelDesktop?.());
+  await refreshTargets();
+  const cancelChangedDisplay = () => { captureAbort?.abort(); cancelDesktop?.(); };
+  screen.on('display-added', cancelChangedDisplay);
+  screen.on('display-removed', cancelChangedDisplay);
+  screen.on('display-metrics-changed', cancelChangedDisplay);
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => callback(wc === captureWindow?.webContents && permission === 'display-capture'));
   session.defaultSession.setPermissionCheckHandler((wc, permission) => wc === captureWindow?.webContents && permission === 'display-capture');
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
@@ -377,6 +398,7 @@ app.whenReady().then(async () => {
   changed();
   if (shortcutError) status(shortcutError);
   await api('/status', { message: shortcutReady ? `Annotate Console ready. Mark an app area with ${info.shortcut}` : `Annotate Console ready. Use Capture; shortcut ${info.shortcut} is unavailable.${shortcutError ? ` ${shortcutError}` : ''}` });
+  const destinations = setInterval(() => { void refreshTargets().catch(error => status(`Destinations: ${error.message}`)); }, 1000); destinations.unref();
   const watchdog = setInterval(() => api('/session').catch(() => { quitting = true; app.quit(); }), 5000); watchdog.unref();
 }).catch(error => { dialog.showErrorBox('Annotate Console', error.message); app.exit(1); });
 app.on('before-quit', () => { quitting = true; shortcutOwner?.stop(); consoleState?.dispose(); captureAbort?.abort(); cancelDesktop?.(); cancelSource?.(); cancelPortal?.(); });

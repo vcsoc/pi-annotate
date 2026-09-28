@@ -16,7 +16,7 @@ function png(width = 640, height = 420) {
   bytes.write('IHDR', 12); bytes.writeUInt32BE(width, 16); bytes.writeUInt32BE(height, 20);
   return bytes.toString('base64');
 }
-function controller() {
+function controller(captureStubs = {}) {
   const handlers = new Map(), deferred = [], switches = new Map(), submissions = [], quits = [];
   const window = () => {
     let destroyed = false;
@@ -32,7 +32,8 @@ function controller() {
     require: name => {
       const deny = async () => { throw new Error('Native desktop calls are forbidden in non-GUI controller tests'); };
       if (name === 'electron') return electron;
-      if (name === './capture-adapters.cjs') return { ...require(name), windowBoxes: deny, selectRegion: deny, enforceFloating: deny, workAreas: deny };
+      if (name === './capture-adapters.cjs') return { ...require(name), windowBoxes: captureStubs.windowBoxes || deny, selectRegion: deny, enforceFloating: deny, workAreas: deny };
+      if (name === './capture-wlroots.cjs') return { ...require(name), snapshotDesktop: captureStubs.snapshotDesktop || deny, waitForCapture: captureStubs.waitForCapture || require(name).waitForCapture };
       if (name === './native-windows.cjs') return { ...require(name), nativeWindows: deny };
       if (name === 'node:child_process') return { execFile: (...args) => args.at(-1)(new Error('Subprocesses are forbidden in controller tests')) };
       return require(name);
@@ -122,6 +123,43 @@ test('desktop selector IPC uses display-global geometry and refuses other window
   await c.invoke('desktop-mark', [[[-1500, 100], [-1200, 300]], true]);
   assert.equal(c.context.completed.length, 1); assert.equal(c.context.completed[0].region.width, 300);
   assert.equal(c.context.completed[0].region.x, -1500); assert.equal(c.submissions.length, 0);
+});
+test('Send binds to the visible destination and refuses stale or offline selections without losing drafts', async () => {
+  const c = controller(); c.seed();
+  await c.invoke('add', [{ image: png(), comment: 'Keep this batch' }]); c.flush();
+  c.evaluate("routeState = { selected: { id: 'new-target' }, available: true };");
+  await assert.rejects(c.invoke('send', ['old-target'], c.consoleWindow), /Destination changed/);
+  c.evaluate('routeState.available = false;');
+  await assert.rejects(c.invoke('send', ['new-target'], c.consoleWindow), /offline/);
+  assert.equal(c.evaluate('drafts.length'), 1); assert.equal(c.submissions.length, 0);
+  c.evaluate('routeState.available = true;');
+  await c.invoke('send', ['new-target'], c.consoleWindow);
+  assert.equal(c.submissions[0].targetId, 'new-target');
+});
+test('Omarchy freezes before selector focus and crops the preserved whole app, not the mark', async () => {
+  const events = [], appBox = { x: 0, y: 0, width: 640, height: 420, label: 'Browser' };
+  let menuOpen = true;
+  const c = controller({
+    windowBoxes: async () => [appBox],
+    waitForCapture: async ms => events.push(`delay:${ms}`),
+    snapshotDesktop: async () => {
+      events.push('snapshot'); const pixels = menuOpen ? 'menu-open' : 'menu-closed';
+      return { crop(box) { assert.equal(box, appBox); events.push('whole-app'); return { getSize: () => ({ width: 640, height: 420 }), toPNG: () => Buffer.alloc(33), toDataURL: () => pixels }; } };
+    },
+  });
+  c.consoleWindow.hide = () => events.push('hide');
+  c.context.pick = async () => { events.push('selector'); menuOpen = false; return { region: { x: 100, y: 100, width: 100, height: 100 }, points: [[100, 100], [200, 200]] }; };
+  c.evaluate('selectOnDesktop = pick; openLiveNote = async () => {};');
+  await c.evaluate('capture()');
+  assert.deepEqual(events, ['hide', 'delay:0', 'snapshot', 'selector', 'whole-app']);
+  assert.equal(c.evaluate('frozen.image'), 'menu-open');
+  assert.equal(c.evaluate('frozen.size.width'), 640);
+});
+test('Console Capture gets three seconds to reopen menus; shortcut path has no countdown', async () => {
+  const c = controller(); c.context.requests = [];
+  c.evaluate('capture = async options => requests.push(options);');
+  await c.invoke('capture', [{ kind: 'rectangle', delayMs: 999 }], c.consoleWindow);
+  assert.equal(c.context.requests[0].delayMs, 3000);
 });
 test('untrusted IPC sender cannot read or change the Console', async () => {
   const c = controller();

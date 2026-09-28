@@ -1,5 +1,5 @@
 // Real desktop/compositor + real screenshots of separate synthetic app windows.
-// Only slurp's chosen rectangle is injected; native slurp is tested separately.
+// Pointer marking uses the real desktop selector, including its preserved frame.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -66,11 +66,6 @@ try {
   if (hostHypr) targets = JSON.parse(execFileSync('hyprctl', ['-j', 'clients'])).filter(c => c.pid === fixture.process().pid).sort((a, b) => a.title.localeCompare(b.title)).map(c => ({ x: c.at[0], y: c.at[1], width: c.size[0], height: c.size[1], title: c.title }));
   else targets = await fixture.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map(w => ({ ...w.getBounds(), title: w.getTitle() })).sort((a, b) => a.title.localeCompare(b.title)));
   assert.equal(targets.length, monitors.length);
-  const answersFile = join(temp, 'answers.json'); await writeFile(answersFile, '[]');
-  if (hypr) {
-    await writeFile(join(temp, 'slurp'), `#!${process.execPath}\nconst fs=require('fs');process.stdin.resume();process.stdin.on('end',()=>{const file=${JSON.stringify(answersFile)};const values=JSON.parse(fs.readFileSync(file));console.log(values.shift());fs.writeFileSync(file,JSON.stringify(values));});\n`, { mode: 0o755 });
-    env.PATH = temp + ':' + env.PATH;
-  }
   application = await _electron.launch({ executablePath: require('electron'), args: [fileURLToPath(new URL('../app/main.cjs', import.meta.url))], env: { ...env, PI_ANNOTATE_URL: bridge.url, PI_ANNOTATE_TOKEN: bridge.token }, timeout: 20000 });
   application.on('window', page => page.setDefaultTimeout(10000));
   const consolePage = await application.firstWindow(); consolePage.setDefaultTimeout(10000);
@@ -78,16 +73,15 @@ try {
   const state = () => consolePage.evaluate(() => window.annotate.state());
   async function begin(button, targetIndex = 0) {
     const target = targets[targetIndex];
-    if (hypr) await writeFile(answersFile, JSON.stringify([`${target.x + 100},${target.y + 120} 180x110`]));
     await consolePage.locator(button).click();
     let page;
-    if (hypr) page = await pageFor('note');
-    else {
+    {
       await pageFor('desktop');
       let picker, bounds;
       for (let attempt = 0; attempt < 50 && !picker; attempt++) {
         for (const candidate of application.windows().filter(p => p.url().includes('page=desktop'))) {
           const config = await candidate.evaluate(() => window.annotate.desktopConfig());
+          if (hypr) assert.ok(config.background?.startsWith('data:image/png;base64,'), 'Hyprland selection must show the pre-focus frame');
           const b = config.bounds;
           if (target.x + 100 >= b.x && target.x + 280 < b.x + b.width && target.y + 120 >= b.y && target.y + 230 < b.y + b.height) { picker = candidate; bounds = b; break; }
         }
@@ -100,7 +94,7 @@ try {
       page = await pageFor('note');
     }
     await page.locator('#note-comment').waitFor();
-    assert.equal(await page.locator('#note-comment').getAttribute('rows'), '4');
+    assert.equal(await page.locator('#note-comment').getAttribute('rows'), '5');
     const frozen = await page.evaluate(() => window.annotate.frozen());
     if (hypr) { assert.equal(frozen.size.width, target.width); assert.equal(frozen.size.height, target.height); }
     else assert.ok(Math.abs(frozen.size.width / frozen.size.height - target.width / target.height) < .03, 'Retina/HiDPI captures retain whole-app aspect ratio, not DIP pixel dimensions');

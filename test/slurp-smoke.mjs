@@ -1,4 +1,4 @@
-// Hyprland live selector test. Opens real slurp over every output, then Esc cancels.
+// Hyprland live preserved-selector test (legacy script name). Esc cancels.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -20,13 +20,16 @@ try {
   await new Promise(r => setTimeout(r, 700));
   await toolbar.locator('#capture').click();
   let coversAll = false;
-  for (let i = 0; i < 40; i++) {
-    const layers = JSON.parse(execFileSync('hyprctl', ['-j', 'layers']));
-    coversAll = monitors.every(m => Object.values(layers[m.name]?.levels || {}).flat().some(l => l.namespace === 'selection' && l.x === m.x && l.y === m.y && l.w > 0 && l.h > 0));
+  for (let i = 0; i < 120; i++) {
+    const clients = JSON.parse(execFileSync('hyprctl', ['-j', 'clients'])).filter(c => c.pid === application.process().pid && c.mapped && c.title.startsWith('Annotate Capture — display'));
+    coversAll = monitors.filter(m => !m.disabled).every(m => clients.some(c => c.at[0] === m.x && c.at[1] === m.y && c.size[0] > 0 && c.size[1] > 0));
     if (coversAll) break;
     await new Promise(r => setTimeout(r, 100));
   }
-  assert.equal(coversAll, true, 'native region selector must cover every monitor, including negative origins');
+  assert.equal(coversAll, true, 'preserved-frame selector must cover every monitor, including negative origins');
+  for (const page of application.windows().filter(p => p.url().includes('page=desktop'))) {
+    assert.ok((await page.evaluate(() => window.annotate.desktopConfig())).background.startsWith('data:image/png;base64,'));
+  }
   execFileSync('wtype', ['-k', 'Escape']);
   await toolbar.locator('#notice').filter({ hasText: 'Capture cancelled' }).waitFor();
   assert.equal((await toolbar.evaluate(() => window.annotate.state())).drafts.length, 0);

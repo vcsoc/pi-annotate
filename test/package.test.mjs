@@ -15,7 +15,7 @@ test('standalone runtime assets and dependency lock match the package', () => {
   assert.equal(lock.name, manifest.name);
   assert.equal(lock.version, manifest.version);
   assert.equal(lock.packages[''].dependencies.electron, manifest.dependencies.electron);
-  for (const file of ['index.ts', 'bridge.mjs', 'delivery.mjs', 'dependencies.mjs', 'app/main.cjs', 'app/index.html', 'app/preload.cjs', 'app/renderer.js', 'app/style.css', 'app/console-placement.cjs', 'app/hyprland-shortcut.cjs', 'app/native/windows-macos.js', 'app/native/windows-win32.ps1']) {
+  for (const file of ['index.ts', 'bridge.mjs', 'session-bridge.mjs', 'batch.mjs', 'targets.mjs', 'delivery.mjs', 'dependencies.mjs', 'app/main.cjs', 'app/index.html', 'app/preload.cjs', 'app/renderer.js', 'app/style.css', 'app/console-placement.cjs', 'app/hyprland-shortcut.cjs', 'app/native/windows-macos.js', 'app/native/windows-win32.ps1']) {
     assert.ok(existsSync(new URL(file, root)), `Missing standalone asset: ${file}`);
   }
 });
