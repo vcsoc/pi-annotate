@@ -32,3 +32,12 @@ test('invalid batch IDs cannot escape the project annotations directory', async 
   const cwd = await mkdtemp(join(tmpdir(), 'pi-annotate-test-')); t.after(() => rm(cwd, { recursive: true, force: true }));
   await assert.rejects(deliverBatch({ ...batch(), id: '../../escape' }, { cwd, session: 'test', send() {} }), /Invalid batch ID/);
 });
+test('steering and follow-up propagate through storage, user-message delivery and receipt', async t => {
+  const cwd = await mkdtemp(join(tmpdir(), 'pi-annotate-modes-')); t.after(() => rm(cwd, { recursive: true, force: true }));
+  for (const deliverAs of ['followUp', 'steer']) {
+    let options;
+    const result = await deliverBatch({ ...batch(), id: 'mode-test-' + deliverAs, deliverAs }, { cwd, session: 'session', send: (_content, mode) => { options = mode; } });
+    assert.equal(options.deliverAs, deliverAs); assert.equal(result.deliverAs, deliverAs);
+    assert.equal(JSON.parse(await readFile(join(result.savedTo, 'annotations.json'))).deliverAs, deliverAs);
+  }
+});

@@ -1,6 +1,6 @@
 {
   "name": "pi-annotate",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "main": "app/main.cjs",
@@ -19,7 +19,7 @@
     "setup": "node node_modules/electron/install.js",
     "test": "node --test test/*.test.mjs",
     "test:pi": "node test/pi-headless.mjs",
-    "check": "node --check bridge.mjs && node --check session-bridge.mjs && node --check batch.mjs && node --check targets.mjs && node --check app/main.cjs && node --check app/capture-adapters.cjs && node --check app/runtime.cjs && node --check app/console-placement.cjs && node --check app/console-size.cjs && node --check app/hyprland-shortcut.cjs && node --check app/native-windows.cjs && node --check app/capture-macos.cjs && node --check app/desktop-selection.cjs && node --check app/workflow.mjs && node --check app/geometry.mjs && node --check app/preload.cjs && node --check app/renderer.js && npm test"
+    "check": "node --check bridge.mjs && node --check session-bridge.mjs && node --check batch.mjs && node --check targets.mjs && node --check app/main.cjs && node --check app/capture-adapters.cjs && node --check app/capture-wlroots.cjs && node --check app/settings.cjs && node --check app/runtime.cjs && node --check app/console-placement.cjs && node --check app/console-size.cjs && node --check app/hyprland-shortcut.cjs && node --check app/native-windows.cjs && node --check app/capture-macos.cjs && node --check app/desktop-selection.cjs && node --check app/workflow.mjs && node --check app/geometry.mjs && node --check app/preload.cjs && node --check app/renderer.js && npm test"
   },
   "dependencies": { "electron": "44.4.3" }
 }

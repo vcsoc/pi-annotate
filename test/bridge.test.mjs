@@ -77,3 +77,13 @@ test('geometry maps HiDPI display coordinates independently of screenshot resolu
   assert.equal(validSelection([[0, 0], [0.001, 0.001]]), false);
   assert.equal(validSelection([[0.9, 0.8], [0.1, 0.2]]), true);
 });
+test('delivery mode defaults to follow-up, validates steering and acknowledged retries cannot switch mode', async t => {
+  assert.equal(validateBatch(batch()).deliverAs, 'followUp');
+  assert.equal(validateBatch({ ...batch(), deliverAs: 'steer' }).deliverAs, 'steer');
+  for (const deliverAs of ['invalid', null, 1]) assert.throws(() => validateBatch({ ...batch(), deliverAs }), /delivery mode/);
+  let delivered = 0;
+  const { request } = await fixture(t, async b => { delivered++; return { deliverAs: b.deliverAs }; });
+  const first = await request({ ...batch(), deliverAs: 'steer' }); assert.equal((await first.json()).deliverAs, 'steer');
+  const retry = await request({ ...batch(), deliverAs: 'followUp' }); assert.equal((await retry.json()).deliverAs, 'steer');
+  assert.equal(delivered, 1);
+});

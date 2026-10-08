@@ -43,7 +43,7 @@ export async function activeTargets(directory = registryDirectory()) {
     try {
       const status = await request(record, '/session');
       if (status.targetId !== record.id || status.project !== record.project || status.session !== record.session) return;
-      return { ...record, name: typeof status.name === 'string' ? status.name.slice(0, 120) : '', consoleOpen: status.consoleOpen === true };
+      return { ...record, name: typeof status.name === 'string' ? status.name.slice(0, 120) : '', consoleOpen: status.consoleOpen === true, deliveryModes: Array.isArray(status.deliveryModes) ? status.deliveryModes.filter(mode => ['followUp', 'steer'].includes(mode)) : ['followUp'] };
     } catch { /* Closed/reloaded sessions are not valid destinations. */ }
   }));
   return available.filter(Boolean).sort((a, b) => a.project.localeCompare(b.project) || a.id.localeCompare(b.id));
@@ -75,6 +75,7 @@ export function createRouting(self, { directory = registryDirectory(), localSubm
       if (previous && previous !== target.id) throw new Error('This batch was already attempted for another session. Retry the original destination or discard it before switching.');
       const live = (await list()).find(t => t.id === target.id);
       if (!live) throw new Error('Selected Pi session is offline. Annotations have not been redirected.');
+      if (target.id !== self.id && batch.deliverAs === 'steer' && !live.deliveryModes?.includes('steer')) throw new Error('Reload Annotate in the destination Pi session to enable Queued (steering). Drafts were kept.');
       attempts.set(batch.id, target.id);
       if (attempts.size > 100) attempts.delete(attempts.keys().next().value);
       // /deliver always targets the recipient's own immutable session, never

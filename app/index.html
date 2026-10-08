@@ -4,10 +4,28 @@
 <title>Annotate Console</title><link rel="stylesheet" href="style.css"></head>
 <body>
 <section id="toolbar" hidden>
-  <header class="drag console-title"><strong>✎ Annotate Console</strong><span id="shortcut" class="muted"></span><button id="close-console" class="icon" aria-label="Close Annotate Console">×</button></header>
+  <header class="drag console-title"><strong>✎ Annotate Console</strong><span id="shortcut" class="muted"></span><button id="toggle-settings" class="icon" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings">⚙</button><button id="close-console" class="icon" aria-label="Close Annotate Console">×</button></header>
   <div class="console-actions"><button id="capture" class="primary">＋ Capture</button><select id="capture-kind" aria-label="Mark tool"><option value="rectangle">▭ Area</option><option value="freehand">✎ Freehand</option></select><button id="clear" class="action-icon" title="Discard all annotations" aria-label="Discard all annotations">🗑</button><button id="send" class="primary action-icon" title="Send all annotations" aria-label="Send all annotations" disabled><span aria-hidden="true">➤</span> <span id="send-count">0</span></button></div>
+  <div class="console-actions"><label for="delivery-mode">Send as</label><select id="delivery-mode" aria-label="Annotation delivery mode" title="Follow-up waits for the current task to finish. Queued (steering) is read at the next tool boundary."><option value="followUp">Follow-up</option><option value="steer">Queued (steering)</option></select></div>
   <div class="project-location"><label class="muted" for="project">Send to project / Pi session</label><select id="project" aria-label="Annotation destination"></select></div>
   <p id="notice" role="status">Capture → mark an app area → add a note → ✓ save here. Send only when ready.</p>
+  <div id="settings" hidden>
+    <h2>Settings</h2>
+    <label for="capture-countdown">Capture countdown (seconds)</label>
+    <input id="capture-countdown" type="number" min="0" max="30" step="1" value="1">
+    <p class="muted">Wait before Capture or Retake so you can reopen a menu. Set 0 for no delay. The keyboard shortcut always captures immediately.</p>
+    <label for="capture-mode">Capture mode (Hyprland / sway)</label>
+    <select id="capture-mode" aria-describedby="capture-mode-help"><option value="live">Live marking (default)</option><option value="preserved">Preserved frame (keeps dropdowns)</option></select>
+    <p id="capture-mode-help" class="muted">Live marks the app without freezing, then captures it. Preserved freezes the desktop before marking to keep menus. Other desktops use their native live capture.</p>
+    <label for="max-annotations">Maximum annotations per batch</label>
+    <input id="max-annotations" type="number" min="1" max="12" step="1" value="8">
+    <p class="muted">Default: 8; range 1–12. The 24 MiB transport limit still applies. Existing drafts are never removed by settings.</p>
+    <label for="default-delivery">Default send as</label>
+    <select id="default-delivery"><option value="followUp">Follow-up</option><option value="steer">Queued (steering)</option></select>
+    <p id="settings-status" role="status"></p>
+    <div class="settings-actions"><button id="cancel-settings">Cancel</button><button id="save-settings" class="primary">Save settings</button></div>
+    <footer class="developer-credit"><span>Developed by Chris Visser</span><a id="developer-link" href="https://github.com/vcsoc">github.com/vcsoc</a></footer>
+  </div>
   <div id="console-body">
     <nav id="drafts" aria-label="Saved annotations"></nav>
     <div id="empty"><strong>No annotations yet</strong><p>Click Capture and mark an area in an app.</p><p>Each entry keeps the <b>whole app with your mark</b>, plus your note.</p></div>

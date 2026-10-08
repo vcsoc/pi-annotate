@@ -10,7 +10,7 @@ test('project location is an accessible destination dropdown and Send includes i
   assert.match(js, /api\.target\(id\)/);
   assert.match(js, /\$\('project'\)\.value = state\.destinationId/);
   assert.match(js, /changingTarget = true/);
-  assert.match(js, /api\.send\(state\.destinationId\)/);
+  assert.match(js, /api\.send\(state\.destinationId, \$\('delivery-mode'\)\.value\)/);
   assert.match(html, /selected Pi session/);
 });
 test('note input fills spare vertical space and Tick is wider without an expanding footer', () => {

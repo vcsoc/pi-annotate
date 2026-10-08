@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 // Use a fresh module identity: older Pi processes can retain bridge.mjs across /reload.
 import { createBridge } from './session-bridge.mjs';
-import { deliverBatch } from './delivery.mjs';
+import { deliverBatch, deliveryModes } from './delivery.mjs';
 import { advertise, activeTargets, createRouting, request } from './targets.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -36,20 +36,24 @@ export default function annotate(pi: ExtensionAPI) {
   async function ensureBridge(ctx: ExtensionContext) {
     current = ctx;
     if (bridge) return;
+    if (!deliveryModes?.includes('steer')) throw new Error('Annotate loaded an outdated delivery module. Fully restart Pi and resume this session before using the updated delivery choices.');
     registering ??= (async () => {
       const epoch = generation, cwd = ctx.cwd, session = ctx.sessionManager.getSessionId();
       const assertActive = () => { if (epoch !== generation) throw new Error('This Pi session has closed. Nothing was sent.'); };
+      const assertBatchMode = (batch: any) => {
+        if (!deliveryModes.includes(batch.deliverAs)) throw new Error('Annotate loaded an outdated batch validator. Fully restart the Console host Pi session; nothing was sent.');
+      };
       const submit = async (batch: any) => {
-        assertActive();
+        assertActive(); assertBatchMode(batch);
         if (!current?.model?.input?.includes('image')) throw new Error('Select a vision-capable model in the destination Pi session, then retry Send. Annotations remain in the Console.');
         return deliverBatch(batch, { cwd, session, assertActive, send: (content: any, options: any) => pi.sendUserMessage(content, options) });
       };
       const active = await createBridge({
         project: cwd, session, shortcut: process.env.PI_ANNOTATE_HOTKEY || 'CommandOrControl+Shift+A',
-        getInfo: () => ({ targetId: id, name: pi.getSessionName?.() || '', consoleOpen: open() }),
+        getInfo: () => ({ targetId: id, name: pi.getSessionName?.() || '', consoleOpen: open(), deliveryModes }),
         onStatus(message: string) { if (epoch === generation) current?.ui.notify(`Annotate: ${message}`, 'info'); },
         onSubmit: submit,
-        onRouteSubmit: (batch: any, targetId: string) => { assertActive(); return routing.submit(batch, targetId); },
+        onRouteSubmit: (batch: any, targetId: string) => { assertActive(); assertBatchMode(batch); return routing.submit(batch, targetId); },
         onTargets: () => routing.targets(),
         onSelectTarget: (targetId: string) => { assertActive(); return routing.select(targetId); },
         onStop: () => { stopChild(); return { ok: true }; },
@@ -103,7 +107,7 @@ export default function annotate(pi: ExtensionAPI) {
     description: 'Open Annotate Console: whole-app screenshots, highlighted areas, notes and batch Send',
     handler: async (args, ctx) => {
       const action = args.trim().toLowerCase();
-      if (action === 'help') return ctx.ui.notify('/annotate opens or retargets the existing Console to this project/session, keeping drafts. Capture → mark an app area → note → ✓ save. Each image retains the entire application with your area highlighted. Retake / replace or Retake as new. Select an active Pi destination before Send. /annotate stop discards unsent drafts.', 'info');
+      if (action === 'help') return ctx.ui.notify('/annotate opens or retargets the existing Console to this project/session, keeping drafts. Capture → mark an app area → note → ✓ save. Each image retains the entire application with your area highlighted. Retake / replace or Retake as new. Select an active Pi destination and Send as Follow-up or Queued (steering). Settings sets countdown, batch limit (default 8), delivery default and wlroots Live (default) / Preserved frame marking. /annotate stop discards unsent drafts.', 'info');
       if (action && action !== 'stop') return ctx.ui.notify('Usage: /annotate [help|stop]', 'warning');
       try {
         if (action === 'stop') {

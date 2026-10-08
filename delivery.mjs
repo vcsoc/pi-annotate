@@ -1,9 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { validateBatch } from './bridge.mjs';
+import * as batches from './batch.mjs';
+// Startup refuses cached pre-mode validators/delivery instead of advertising
+// steering that an old module would silently convert to follow-up.
+export const deliveryModes = batches.deliveryModes || [];
 
 export async function deliverBatch(value, { cwd, session, assertActive = () => {}, send }) {
-  const batch = validateBatch(value);
+  const batch = batches.validateBatch(value);
   assertActive();
   const folder = resolve(cwd, '.pi', 'annotations', batch.id);
   await mkdir(folder, { recursive: true, mode: 0o700 });
@@ -17,8 +20,8 @@ export async function deliverBatch(value, { cwd, session, assertActive = () => {
     content.push({ type: 'text', text: `Annotation ${index + 1} — ${item.source}\nComment: ${item.comment}\nSelection: ${item.kind}; points: ${JSON.stringify(item.points)}\nScreenshot: ${join(folder, filename)}` });
     content.push({ type: 'image', data: image, mimeType: 'image/png' });
   }
-  await writeFile(join(folder, 'annotations.json'), JSON.stringify({ id: batch.id, session, project: cwd, createdAt: new Date().toISOString(), items: metadata }, null, 2), { mode: 0o600 });
+  await writeFile(join(folder, 'annotations.json'), JSON.stringify({ id: batch.id, session, project: cwd, deliverAs: batch.deliverAs, createdAt: new Date().toISOString(), items: metadata }, null, 2), { mode: 0o600 });
   assertActive();
-  await send(content, { deliverAs: 'followUp' });
-  return { savedTo: folder, count: batch.items.length };
+  await send(content, { deliverAs: batch.deliverAs });
+  return { savedTo: folder, count: batch.items.length, deliverAs: batch.deliverAs };
 }

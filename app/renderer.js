@@ -29,6 +29,7 @@ if (page === 'desktop') {
   const point = e => [config.bounds.x + e.clientX * config.bounds.width / innerWidth, config.bounds.y + e.clientY * config.bounds.height / innerHeight];
   const progress = () => { render({ kind: config.kind, points }); if (points.length >= 2) void api.desktopMark(points).catch(() => {}); };
   api.onDesktopProgress(render); render();
+  if (config.background) requestAnimationFrame(() => requestAnimationFrame(() => { void api.desktopReady().catch(report); }));
   canvas.addEventListener('pointerdown', e => { if (e.button !== 0) return; drawing = true; points = [point(e)]; canvas.setPointerCapture(e.pointerId); progress(); });
   canvas.addEventListener('pointermove', e => {
     if (!drawing) return;
@@ -52,7 +53,7 @@ if (page === 'mark') {
 }
 
 if (page === 'toolbar') {
-  let state, selectedId, refreshing = false, again = false, changingTarget = false;
+  let state, selectedId, refreshing = false, again = false, changingTarget = false, settingsSaving = false, appliedDefault;
   const selected = () => state?.drafts.find(item => item.id === selectedId);
   function select(id) {
     selectedId = id; const item = selected();
@@ -64,16 +65,27 @@ if (page === 'toolbar') {
     if (!item) return;
     $('entry-image').src = item.preview; $('entry-image').title = item.source;
     $('entry-comment').value = item.comment;
-    $('entry-count').textContent = `${state.drafts.length}/12`;
+    $('entry-count').textContent = `${state.drafts.length}/${state.settings.maxAnnotations}`;
     void api.select(id).catch(report);
   }
   async function refresh() {
     if (refreshing) { again = true; return; } refreshing = true;
     try {
       state = await api.state(); const disabled = state.sending || state.capturing || changingTarget;
-      const timed = ['hyprland', 'sway'].includes(state.backend);
-      $('capture').textContent = timed ? '＋ Capture (3s)' : '＋ Capture';
-      $('capture').title = timed ? 'Hides the Console, then waits 3 seconds so you can reopen a menu. The keyboard shortcut preserves the screen immediately.' : 'Capture an application';
+      const seconds = state.settings?.countdownSeconds ?? 1;
+      $('capture').textContent = seconds ? `＋ Capture (${seconds}s)` : '＋ Capture';
+      const mode = state.preservedCaptureAvailable && state.settings.captureMode === 'preserved' ? 'Preserved frame' : 'Live marking';
+      $('capture').title = `${mode}. Hides the Console, then waits ${seconds} seconds. Reopen any menu before marking. The shortcut has no countdown.`;
+      $('save-settings').disabled = $('cancel-settings').disabled = disabled || settingsSaving;
+      $('toggle-settings').disabled = disabled || settingsSaving;
+      $('capture-mode').disabled = disabled || settingsSaving || !state.preservedCaptureAvailable;
+      for (const id of ['capture-countdown', 'max-annotations', 'default-delivery']) $(id).disabled = disabled || settingsSaving;
+      $('delivery-mode').disabled = disabled || settingsSaving;
+      if (appliedDefault !== state.settings.defaultDeliverAs) {
+        $('delivery-mode').value = state.settings.defaultDeliverAs;
+        appliedDefault = state.settings.defaultDeliverAs;
+      }
+      if (state.notice) $('notice').textContent = state.notice;
       const targets = [...state.destinations];
       if (!targets.some(target => target.id === state.destinationId)) targets.unshift({ id: state.destinationId, project: state.project, session: '', name: 'offline' });
       const optionsKey = JSON.stringify([targets, state.destinationId, state.destinationAvailable]);
@@ -96,7 +108,7 @@ if (page === 'toolbar') {
       $('send').title = state.sending ? 'Sending annotations…' : `Send all ${state.drafts.length} annotations to ${state.project}`;
       $('send').setAttribute('aria-label', $('send').title);
       $('clear').disabled = disabled || !state.drafts.length;
-      $('capture').disabled = disabled || state.drafts.length >= 12;
+      $('capture').disabled = disabled || state.drafts.length >= state.settings.maxAnnotations;
       $('capture-kind').disabled = disabled;
       $('entry-comment').disabled = disabled;
       $('drafts').replaceChildren();
@@ -109,7 +121,7 @@ if (page === 'toolbar') {
         const controls = document.createElement('div'); controls.className = 'entry-actions';
         for (const [icon, label, callback, full] of [
           ['↻', 'Retake and replace this annotation', () => api.capture({ replaceId: item.id, kind: $('capture-kind').value }), false],
-          ['⊕', 'Capture a new annotation using this note', () => api.capture({ copyId: item.id, kind: $('capture-kind').value }), state.drafts.length >= 12],
+          ['⊕', 'Capture a new annotation using this note', () => api.capture({ copyId: item.id, kind: $('capture-kind').value }), state.drafts.length >= state.settings.maxAnnotations],
           ['🗑', 'Delete this annotation', () => api.remove(item.id), false],
         ]) {
           const control = document.createElement('button'); control.className = 'action-icon'; control.textContent = icon;
@@ -129,6 +141,38 @@ if (page === 'toolbar') {
     catch (error) { report(error); }
     finally { changingTarget = false; await refresh().catch(report); }
   });
+  const closeSettings = () => {
+    $('settings').hidden = true;
+    $('toolbar').classList.toggle('settings-open', false);
+    $('toggle-settings').setAttribute('aria-expanded', 'false'); $('toggle-settings').focus();
+  };
+  action('toggle-settings', () => {
+    if (settingsSaving || state.sending || state.capturing || changingTarget) return;
+    if (!$('settings').hidden) { closeSettings(); return; }
+    $('capture-countdown').value = state.settings.countdownSeconds;
+    $('capture-mode').value = state.settings.captureMode;
+    $('max-annotations').value = state.settings.maxAnnotations;
+    $('default-delivery').value = state.settings.defaultDeliverAs;
+    $('settings-status').textContent = '';
+    $('settings').hidden = false;
+    $('toolbar').classList.toggle('settings-open', true);
+    $('toggle-settings').setAttribute('aria-expanded', 'true'); $('capture-countdown').focus();
+  });
+  action('cancel-settings', closeSettings);
+  action('save-settings', async () => {
+    if (settingsSaving || state.sending || state.capturing || changingTarget) return;
+    for (const id of ['capture-countdown', 'max-annotations']) if (!$(id).value || !$(id).reportValidity()) return;
+    settingsSaving = true; $('save-settings').disabled = $('cancel-settings').disabled = true;
+    try {
+      await api.settings({ countdownSeconds: Number($('capture-countdown').value), captureMode: $('capture-mode').value, maxAnnotations: Number($('max-annotations').value), defaultDeliverAs: $('default-delivery').value });
+      await refresh(); closeSettings();
+    } catch (error) { $('settings-status').textContent = error.message || String(error); }
+    finally { settingsSaving = false; await refresh().catch(report); }
+  });
+  window.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !$('settings').hidden && !settingsSaving) { event.preventDefault(); closeSettings(); }
+  });
+  $('developer-link').addEventListener('click', event => { event.preventDefault(); void api.developerPage().catch(report); });
   action('capture', () => api.capture({ kind: $('capture-kind').value }));
   action('clear', () => api.clear());
   action('close-console', () => api.quit());
@@ -142,7 +186,7 @@ if (page === 'toolbar') {
     void api.comment(item.id, item.comment).catch(report);
   });
   // The persistent footer warns before Send; main closes only after delivery succeeds.
-  action('send', () => api.send(state.destinationId));
+  action('send', () => api.send(state.destinationId, $('delivery-mode').value));
   await refresh();
 }
 

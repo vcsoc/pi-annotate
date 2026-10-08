@@ -20,22 +20,23 @@ function controller(captureStubs = {}) {
   const handlers = new Map(), deferred = [], switches = new Map(), submissions = [], quits = [];
   const window = () => {
     let destroyed = false;
-    return { webContents: { mainFrame: {}, send() {} }, isDestroyed: () => destroyed, show() {}, focus() {}, destroy() { destroyed = true; } };
+    return { webContents: { mainFrame: {}, send() {} }, isDestroyed: () => destroyed, show() {}, hide() {}, focus() {}, destroy() { destroyed = true; } };
   };
   const consoleWindow = window(), note = window();
   const electron = {
-    app: { setName() {}, quit() { quits.push(true); }, commandLine: { appendSwitch: (key, value) => switches.set(key, value) }, whenReady: () => new Promise(() => {}), on() {} },
+    app: { setName() {}, getPath: () => '/test-fixture-no-write', quit() { quits.push(true); }, commandLine: { appendSwitch: (key, value) => switches.set(key, value) }, whenReady: () => new Promise(() => {}), on() {} },
     ipcMain: { handle: (key, fn) => handlers.set(key, fn) },
-    nativeImage: { createFromDataURL: image => ({ resize: () => ({ toDataURL: () => image }) }) },
+    nativeImage: { createFromDataURL: image => ({ resize: () => ({ toDataURL: () => image }) }), createFromBuffer: captureStubs.decode || (() => { throw new Error('Unexpected native image decode'); }) },
   };
   const context = vm.createContext({
     require: name => {
       const deny = async () => { throw new Error('Native desktop calls are forbidden in non-GUI controller tests'); };
       if (name === 'electron') return electron;
-      if (name === './capture-adapters.cjs') return { ...require(name), windowBoxes: captureStubs.windowBoxes || deny, selectRegion: deny, enforceFloating: deny, workAreas: deny };
-      if (name === './capture-wlroots.cjs') return { ...require(name), snapshotDesktop: captureStubs.snapshotDesktop || deny, waitForCapture: captureStubs.waitForCapture || require(name).waitForCapture };
+      if (name === './capture-adapters.cjs') return { ...require(name), windowBoxes: captureStubs.windowBoxes || deny, selectRegion: captureStubs.selectRegion || deny, enforceFloating: deny, workAreas: captureStubs.workAreas || deny };
+      if (name === './capture-wlroots.cjs') return { ...require(name), snapshotDesktop: captureStubs.snapshotDesktop || deny, readDisplayBounds: captureStubs.readDisplayBounds || deny, waitForCapture: captureStubs.waitForCapture || require(name).waitForCapture };
+      if (name === './settings.cjs') return { ...require(name), saveSettings: captureStubs.saveSettings || require(name).saveSettings };
       if (name === './native-windows.cjs') return { ...require(name), nativeWindows: deny };
-      if (name === 'node:child_process') return { execFile: (...args) => args.at(-1)(new Error('Subprocesses are forbidden in controller tests')) };
+      if (name === 'node:child_process') return { execFile: captureStubs.execFile || ((...args) => args.at(-1)(new Error('Subprocesses are forbidden in controller tests'))) };
       return require(name);
     }, __dirname: dirname(filename), Buffer, console,
     process: { platform: 'linux', pid: 123, env: { PI_ANNOTATE_URL: 'http://127.0.0.1:12345', PI_ANNOTATE_TOKEN: 'a'.repeat(64), WAYLAND_DISPLAY: 'test-only', XDG_CURRENT_DESKTOP: 'Hyprland' }, on() {}, exit() { throw new Error('Unexpected exit'); } },
@@ -136,32 +137,97 @@ test('Send binds to the visible destination and refuses stale or offline selecti
   await c.invoke('send', ['new-target'], c.consoleWindow);
   assert.equal(c.submissions[0].targetId, 'new-target');
 });
-test('Omarchy freezes before selector focus and crops the preserved whole app, not the mark', async () => {
-  const events = [], appBox = { x: 0, y: 0, width: 640, height: 420, label: 'Browser' };
-  let menuOpen = true;
-  const c = controller({
-    windowBoxes: async () => [appBox],
-    waitForCapture: async ms => events.push(`delay:${ms}`),
-    snapshotDesktop: async () => {
-      events.push('snapshot'); const pixels = menuOpen ? 'menu-open' : 'menu-closed';
-      return { crop(box) { assert.equal(box, appBox); events.push('whole-app'); return { getSize: () => ({ width: 640, height: 420 }), toPNG: () => Buffer.alloc(33), toDataURL: () => pixels }; } };
-    },
-  });
-  c.consoleWindow.hide = () => events.push('hide');
-  c.context.pick = async () => { events.push('selector'); menuOpen = false; return { region: { x: 100, y: 100, width: 100, height: 100 }, points: [[100, 100], [200, 200]] }; };
-  c.evaluate('selectOnDesktop = pick; openLiveNote = async () => {};');
-  await c.evaluate('capture()');
-  assert.deepEqual(events, ['hide', 'delay:0', 'snapshot', 'selector', 'whole-app']);
-  assert.equal(c.evaluate('frozen.image'), 'menu-open');
-  assert.equal(c.evaluate('frozen.size.width'), 640);
+test('Omarchy marks the live desktop before taking whole-app evidence, without a screenshot backdrop', () => {
+  const branch = source.slice(source.indexOf('        // Live is the default:'), source.indexOf('    } else {\n      if (wayland'));
+  assert.doesNotMatch(branch, /snapshotDesktop|frame\.crop|selectOnDesktop\(kind,/);
+  assert.ok(branch.indexOf('await selectRegion') < branch.indexOf("await exec('grim'"));
+  assert.match(branch, /await selectOnDesktop\(kind\)/);
+  assert.match(branch, /geometry\(target\)/);
 });
-test('Console Capture gets three seconds to reopen menus; shortcut path has no countdown', async () => {
+test('Console Capture uses the one-second default and configurable countdown', async () => {
   const c = controller(); c.context.requests = [];
   c.evaluate('capture = async options => requests.push(options);');
   await c.invoke('capture', [{ kind: 'rectangle', delayMs: 999 }], c.consoleWindow);
-  assert.equal(c.context.requests[0].delayMs, 3000);
+  assert.equal(c.context.requests[0].delayMs, 1000);
+  c.evaluate('settings.countdownSeconds = 7;');
+  await c.invoke('capture', [{}], c.consoleWindow);
+  assert.equal(c.context.requests[1].delayMs, 7000);
+});
+test('preserved selectors wait for every painted backdrop before showing', async () => {
+  const c = controller(), shown = [];
+  c.context.note.showInactive = () => shown.push('note');
+  c.consoleWindow.showInactive = () => shown.push('other');
+  c.evaluate('desktopBackdrop = {}; selectors.set(note, {}); selectors.set(consoleWindow, {});');
+  await c.invoke('desktop-ready'); assert.equal(shown.length, 0);
+  await c.invoke('desktop-ready', [], c.consoleWindow);
+  assert.deepEqual(shown, ['note', 'other']);
+});
+test('capture errors remain readable after the Console refreshes', async () => {
+  const c = controller(); c.evaluate("status('Capture failed: example diagnostic');");
+  assert.equal((await c.invoke('state')).notice, 'Capture failed: example diagnostic');
+  await assert.rejects(c.invoke('settings', [{ countdownSeconds: 2 }]), /Only the Console/);
+  await assert.rejects(c.invoke('developer-page'), /Only the Console/);
 });
 test('untrusted IPC sender cannot read or change the Console', async () => {
   const c = controller();
   await assert.rejects(c.invoke('state', [], { webContents: { mainFrame: {} } }), /Untrusted window/);
+});
+
+for (const mode of ['live', 'preserved']) for (const kind of ['rectangle', 'freehand']) {
+  test(`${mode} ${kind} uses the expected capture order and retains the full app`, async () => {
+    const calls = [], areas = [{ x: 0, y: 0, width: 1920, height: 1080 }];
+    const target = { x: 0, y: 0, width: 640, height: 420, label: 'Test app' };
+    const region = { x: 100, y: 100, width: 200, height: 100 };
+    const marked = { region, points: kind === 'rectangle' ? [[100, 100], [300, 200]] : [[100, 100], [300, 150], [150, 200]] };
+    const image = { getSize: () => ({ width: 640, height: 420 }), toPNG: () => Buffer.from(png(), 'base64'), toDataURL: () => 'data:image/png;base64,' + png() };
+    const frame = { areas, crop: box => { calls.push('crop'); assert.equal(box.width, 640); return image; }, preview() {} };
+    const c = controller({
+      windowBoxes: async () => [target], readDisplayBounds: async () => areas,
+      snapshotDesktop: async () => { calls.push('snapshot'); return frame; },
+      selectRegion: async () => { calls.push('slurp'); return region; },
+      execFile: (command, args, options, callback) => { calls.push(command); assert.equal(command, 'grim'); assert.ok(args.includes('0,0 640x420')); callback(null, { stdout: Buffer.from(png(), 'base64') }); },
+      decode: () => image,
+    });
+    c.context.mode = mode;
+    c.context.selectMock = async (_kind, backdrop) => { calls.push('desktop'); assert.equal(Boolean(backdrop), mode === 'preserved'); return marked; };
+    c.evaluate('settings.captureMode = mode; settings.countdownSeconds = 0; selectOnDesktop = selectMock; openLiveNote = async () => {};');
+    await c.evaluate(`capture({ kind: '${kind}' })`);
+    assert.ok(c.evaluate('frozen'), c.evaluate('lastNotice'));
+    assert.equal(c.evaluate('frozen.size.width'), 640);
+    assert.equal(c.evaluate('frozen.size.height'), 420);
+    assert.equal(c.evaluate('frozen.kind'), kind);
+    assert.deepEqual(calls, mode === 'preserved' ? ['snapshot', 'desktop', 'crop'] : [kind === 'rectangle' ? 'slurp' : 'desktop', 'grim']);
+    assert.equal(c.submissions.length, 0);
+  });
+}
+test('combined settings persist atomically, enforce limits, retain drafts and protect other senders', async () => {
+  let saved;
+  const c = controller({ saveSettings: (_file, value) => { saved = { ...value }; return value; } });
+  assert.equal((await c.invoke('state')).settings.captureMode, 'live');
+  assert.equal((await c.invoke('state')).settings.maxAnnotations, 8);
+  await assert.rejects(c.invoke('settings', [{ countdownSeconds: 0 }]), /Only the Console/);
+  await c.invoke('settings', [{ countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer' }], c.consoleWindow);
+  assert.deepEqual(saved, { countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer' });
+  const items = [0, 1].map(i => ({ id: 'old-' + i, image: png(), comment: 'Keep me' })); c.seed(undefined, items);
+  await assert.rejects(c.invoke('settings', [{ maxAnnotations: 1 }], c.consoleWindow), /Finish the current capture/);
+  await assert.rejects(c.invoke('add', [{ image: png(), comment: 'Over limit' }]), /Batch limit/);
+  await c.invoke('cancel');
+  await assert.rejects(c.invoke('settings', [{ maxAnnotations: 1 }], c.consoleWindow), /unsent annotations/);
+  assert.equal(c.evaluate('drafts.length'), 2);
+  const retake = controller(); retake.evaluate('settings.maxAnnotations = 2;'); retake.seed('old-0', items);
+  assert.equal((await retake.invoke('add', [{ image: png(), comment: 'Allowed retake' }])).count, 2);
+  retake.flush(); assert.equal(retake.evaluate('drafts[0].comment'), 'Allowed retake');
+});
+test('failed settings write keeps current settings and the batch', async () => {
+  const c = controller({ saveSettings: () => { throw new Error('Disk unavailable'); } });
+  await assert.rejects(c.invoke('settings', [{ captureMode: 'preserved' }], c.consoleWindow), /Disk unavailable/);
+  assert.equal((await c.invoke('state')).settings.captureMode, 'live');
+});
+test('Send forwards both visible destination and mode; invalid modes keep drafts', async () => {
+  const c = controller(); c.seed(); await c.invoke('add', [{ image: png(), comment: 'Ready' }]); c.flush();
+  c.evaluate("routeState = { selected: { id: 'target' }, available: true }; settings.defaultDeliverAs = 'steer';");
+  await assert.rejects(c.invoke('send', ['target', 'invalid'], c.consoleWindow), /Invalid delivery mode/);
+  assert.equal(c.evaluate('drafts.length'), 1);
+  await c.invoke('send', ['target'], c.consoleWindow);
+  assert.equal(c.submissions[0].targetId, 'target'); assert.equal(c.submissions[0].deliverAs, 'steer');
 });

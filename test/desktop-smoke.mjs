@@ -66,10 +66,18 @@ try {
   if (hostHypr) targets = JSON.parse(execFileSync('hyprctl', ['-j', 'clients'])).filter(c => c.pid === fixture.process().pid).sort((a, b) => a.title.localeCompare(b.title)).map(c => ({ x: c.at[0], y: c.at[1], width: c.size[0], height: c.size[1], title: c.title }));
   else targets = await fixture.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map(w => ({ ...w.getBounds(), title: w.getTitle() })).sort((a, b) => a.title.localeCompare(b.title)));
   assert.equal(targets.length, monitors.length);
-  application = await _electron.launch({ executablePath: require('electron'), args: [fileURLToPath(new URL('../app/main.cjs', import.meta.url))], env: { ...env, PI_ANNOTATE_URL: bridge.url, PI_ANNOTATE_TOKEN: bridge.token }, timeout: 20000 });
+  // Keep this real-pointer fixture explicitly on the retained preserved mode;
+  // controller tests exercise both paths without touching the user's desktop.
+  const userData = join(temp, 'companion-data'), companionFile = join(temp, 'companion.cjs');
+  await mkdir(userData, { recursive: true, mode: 0o700 });
+  await writeFile(join(userData, 'settings.json'), JSON.stringify({ countdownSeconds: 0, captureMode: 'preserved', maxAnnotations: 12, defaultDeliverAs: 'followUp' }));
+  await writeFile(companionFile, `require('electron').app.setPath('userData', ${JSON.stringify(userData)});require(${JSON.stringify(fileURLToPath(new URL('../app/main.cjs', import.meta.url)))});`);
+  application = await _electron.launch({ executablePath: require('electron'), args: [companionFile], env: { ...env, PI_ANNOTATE_URL: bridge.url, PI_ANNOTATE_TOKEN: bridge.token }, timeout: 20000 });
   application.on('window', page => page.setDefaultTimeout(10000));
   const consolePage = await application.firstWindow(); consolePage.setDefaultTimeout(10000);
-  await consolePage.locator('#project').filter({ hasText: '/annotation-console-test' }).waitFor(); await checkConsole(consolePage);
+  await consolePage.locator('#project').waitFor();
+  assert.equal((await consolePage.evaluate(() => window.annotate.state())).project, '/annotation-console-test');
+  await checkConsole(consolePage);
   const state = () => consolePage.evaluate(() => window.annotate.state());
   async function begin(button, targetIndex = 0) {
     const target = targets[targetIndex];
@@ -132,14 +140,14 @@ try {
   await consolePage.locator('#entry-comment').fill('Edited annotation text, same image');
   assert.equal((await state()).drafts[0].comment, 'Edited annotation text, same image');
   const oldPreview = (await state()).drafts[0].preview;
-  let retake = await begin('#retake');
+  let retake = await begin('.entry-row:first-child button[title="Retake and replace this annotation"]');
   assert.equal(await retake.page.locator('#note-comment').inputValue(), 'Edited annotation text, same image');
   await retake.page.locator('#cancel-note').click();
   await consolePage.locator('#notice').filter({ hasText: 'Existing annotations were kept' }).waitFor();
   assert.equal((await state()).drafts[0].preview, oldPreview); assert.equal((await state()).drafts[0].id, firstId);
-  retake = await begin('#retake'); await save(retake.page, 'Replaced screenshot and note', targets.length);
+  retake = await begin('.entry-row:first-child button[title="Retake and replace this annotation"]'); await save(retake.page, 'Replaced screenshot and note', targets.length);
   assert.equal((await state()).drafts[0].id, firstId); assert.equal((await state()).drafts[0].comment, 'Replaced screenshot and note');
-  const appended = await begin('#retake-new'); await save(appended.page, 'Additional annotation', targets.length + 1);
+  const appended = await begin('.entry-row:first-child button[title="Capture a new annotation using this note"]'); await save(appended.page, 'Additional annotation', targets.length + 1);
   assert.notEqual((await state()).drafts.at(-1).id, firstId);
   await consolePage.locator('.entry').first().click();
   await artifact(consolePage, 'console.png');
@@ -160,7 +168,7 @@ try {
     assert.notDeepEqual(pixels.insideA, pixels.insideB, 'the marked area must actually be highlighted in the SAME image');
   }
   assert.equal(consolePage.isClosed(), true, 'successful Send must close the Console');
-  console.log(`PASS: correctly sized floating Console; full-app + mark pixel verification on ${targets.length} app(s); adjacent 4-line note + Tick; list/edit; cancelled retake retention; replace identity; append; explicit batch Send (${hypr ? 'Hyprland/grim' : 'native desktop marking'})`);
+  console.log(`PASS: correctly sized floating Console; full-app + mark pixel verification on ${targets.length} app(s); adjacent multiline note + Tick; list/edit; cancelled retake retention; replace identity; append; explicit batch Send (${hypr ? 'Hyprland/grim' : 'native desktop marking'})`);
 } finally {
   await Promise.allSettled([application?.close(), fixture?.close(), bridge.close()]);
   await rm(temp, { recursive: true, force: true });

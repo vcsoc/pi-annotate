@@ -1,8 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('annotate', {
   state: () => ipcRenderer.invoke('state'),
+  settings: value => ipcRenderer.invoke('settings', value),
+  developerPage: () => ipcRenderer.invoke('developer-page'),
   target: id => ipcRenderer.invoke('target', id),
   desktopConfig: () => ipcRenderer.invoke('desktop-config'),
+  desktopReady: () => ipcRenderer.invoke('desktop-ready'),
   desktopMark: (points, complete = false) => ipcRenderer.invoke('desktop-mark', points, complete),
   onDesktopProgress: callback => ipcRenderer.on('desktop-progress', (_event, mark) => callback(mark)),
   capture: options => ipcRenderer.invoke('capture', options),
@@ -17,7 +20,7 @@ contextBridge.exposeInMainWorld('annotate', {
   remove: id => ipcRenderer.invoke('remove', id),
   comment: (id, comment) => ipcRenderer.invoke('comment', id, comment),
   clear: () => ipcRenderer.invoke('clear'),
-  send: targetId => ipcRenderer.invoke('send', targetId),
+  send: (targetId, deliverAs) => ipcRenderer.invoke('send', targetId, deliverAs),
   quit: () => ipcRenderer.invoke('quit'),
   portalReady: () => ipcRenderer.invoke('portal-ready'),
   portalResult: result => ipcRenderer.invoke('portal-result', result),

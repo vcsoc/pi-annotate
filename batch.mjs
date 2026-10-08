@@ -1,5 +1,6 @@
 export const MAX_BODY = 24 * 1024 * 1024;
 export const MAX_ITEMS = 12;
+export const deliveryModes = Object.freeze(['followUp', 'steer']);
 const fail = message => { throw new Error(message); };
 const text = (value, max, name) => typeof value === 'string' && value.length <= max ? value : fail(`Invalid ${name}`);
 
@@ -20,5 +21,7 @@ export function validateBatch(value) {
     if (!Array.isArray(points) || points.length < 2 || points.length > 4000 || points.some(p => !Array.isArray(p) || p.length !== 2 || p.some(n => !Number.isFinite(n) || n < 0 || n > 1))) fail('Invalid selection coordinates');
     return { comment, image, kind: item.kind, points, width, height, source: text(item.source || 'Screen', 200, 'source') };
   });
-  return { id: value.id, items };
+  const deliverAs = value.deliverAs === undefined ? 'followUp' : value.deliverAs;
+  if (!deliveryModes.includes(deliverAs)) fail('Invalid delivery mode');
+  return { id: value.id, items, deliverAs };
 }

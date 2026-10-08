@@ -18,18 +18,23 @@ function desktopBounds(areas) {
   return { x, y, width, height };
 }
 async function waitForCapture(ms, signal) {
-  if (![0, 3000].includes(ms)) throw new Error('Invalid capture delay');
+  if (!Number.isInteger(ms) || ms < 0 || ms > 30000) throw new Error('Invalid capture delay');
   if (ms) await wait(ms, undefined, { signal });
   signal?.throwIfAborted();
+}
+const layoutKey = areas => JSON.stringify(areas.map(({ x, y, width, height }) => [x, y, width, height]).sort((a, b) => a[0] - b[0] || a[1] - b[1]));
+async function readDisplayBounds(backend, { signal, run = exec } = {}) {
+  const options = { timeout: 1500, maxBuffer: 1024 * 1024, signal };
+  const response = backend === 'hyprland'
+    ? await run('hyprctl', ['-j', 'monitors'], options)
+    : await run('swaymsg', ['-t', 'get_outputs', '-r'], options);
+  return displayBounds(backend, JSON.parse(response.stdout));
 }
 async function snapshotDesktop(backend, { decode, signal, run = exec }) {
   if (!['hyprland', 'sway'].includes(backend)) throw new Error('Unsupported preserved capture backend');
   signal?.throwIfAborted();
   const options = { timeout: 15000, maxBuffer: 64 * 1024 * 1024, signal };
-  const response = backend === 'hyprland'
-    ? await run('hyprctl', ['-j', 'monitors'], { ...options, maxBuffer: 1024 * 1024 })
-    : await run('swaymsg', ['-t', 'get_outputs', '-r'], { ...options, maxBuffer: 1024 * 1024 });
-  const areas = displayBounds(backend, JSON.parse(response.stdout)), bounds = desktopBounds(areas);
+  const areas = await readDisplayBounds(backend, { signal, run }), bounds = desktopBounds(areas);
   // Fixed scale gives one pixel per compositor logical coordinate on mixed-DPI
   // displays, independent of grim's default highest-output-scale behavior.
   const shot = await run('grim', ['-s', '1', '-g', `${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`, '-'], { ...options, encoding: 'buffer' });
@@ -42,8 +47,9 @@ async function snapshotDesktop(backend, { decode, signal, run = exec }) {
     return image.crop(rect);
   };
   return { areas, crop, preview(box) {
-    const thumbnail = crop(box), scale = Math.min(1, 1920 / Math.max(box.width, box.height));
-    return (scale < 1 ? thumbnail.resize({ width: Math.round(box.width * scale), height: Math.round(box.height * scale) }) : thumbnail).toDataURL();
+    // Keep the desktop backdrop at its captured logical resolution. Downscaling
+    // a 4K monitor to 1920px and stretching it back makes text visibly blurred.
+    return crop(box).toDataURL();
   } };
 }
-module.exports = { displayBounds, desktopBounds, waitForCapture, snapshotDesktop };
+module.exports = { displayBounds, desktopBounds, waitForCapture, snapshotDesktop, readDisplayBounds, layoutKey };

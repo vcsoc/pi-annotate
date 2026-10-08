@@ -19,7 +19,7 @@ function batch(id = randomUUID()) {
   image.write('IHDR', 12); image.writeUInt32BE(100, 16); image.writeUInt32BE(80, 20);
   return { id, items: [{ image: image.toString('base64'), comment: 'Change this control', kind: 'rectangle', points: [[0, 0], [.5, .5]], source: 'Test app' }] };
 }
-async function fixture(t, { staleFactory = false } = {}) {
+async function fixture(t, { staleFactory = false, staleDelivery = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'annotate-routing-'));
   const directory = join(root, 'registry'), instances = [], spawned = [];
   t.after(async () => { for (const instance of instances) await instance.events.get('session_shutdown')(); rmSync(root, { recursive: true, force: true }); });
@@ -44,7 +44,7 @@ async function fixture(t, { staleFactory = false } = {}) {
         const legacy = { ...bridge, createBridge: options => bridge.createBridge({ ...options, getInfo: undefined }) };
         if (name === './bridge.mjs') return legacy;
         if (name === './session-bridge.mjs') return staleFactory ? legacy : bridge;
-        if (name === './delivery.mjs') return delivery;
+        if (name === './delivery.mjs') return staleDelivery ? { ...delivery, deliveryModes: undefined } : delivery;
         if (name === './targets.mjs') return { ...targets, advertise: record => targets.advertise(record, directory), activeTargets: () => targets.activeTargets(directory), createRouting: (self, options) => targets.createRouting(self, { ...options, directory }) };
         return require(name);
       },
@@ -53,7 +53,7 @@ async function fixture(t, { staleFactory = false } = {}) {
     const instance = { events, commands, messages, ctx, pi, notices, run: (args = '') => commands.get('annotate').handler(args, ctx) };
     instances.push(instance); await events.get('session_start')({}, ctx);
     instance.record = targets.records(directory).find(record => record.project === ctx.cwd);
-    if (!staleFactory) assert.ok(instance.record); return instance;
+    if (!staleFactory && !staleDelivery) assert.ok(instance.record); return instance;
   }
   return { root, directory, session, spawned };
 }
@@ -117,6 +117,27 @@ test('outdated factory is caught before advertising a broken session destination
   const f = await fixture(t, { staleFactory: true }), a = await f.session('A');
   assert.equal(targets.records(f.directory).length, 0);
   assert.ok(a.notices.some(message => /outdated bridge module.*restart Pi/.test(message)));
+});
+test('cached legacy delivery module is refused before advertising a misleading destination', compiler, async t => {
+  const f = await fixture(t, { staleDelivery: true }), a = await f.session('A');
+  assert.equal(targets.records(f.directory).length, 0); assert.equal(a.messages.length, 0);
+  assert.ok(a.notices.some(message => /outdated delivery module.*restart Pi/.test(message)));
+});
+test('steering reaches only the selected session and persists mode without duplicate retries', compiler, async t => {
+  const f = await fixture(t), a = await f.session('A'), b = await f.session('B'); await a.run(); await b.run();
+  const payload = { ...batch(), deliverAs: 'steer', targetId: b.record.id };
+  const result = await targets.request(a.record, '/submit', payload);
+  assert.equal(result.deliverAs, 'steer'); assert.equal(a.messages.length, 0); assert.equal(b.messages[0].options.deliverAs, 'steer');
+  const metadata = JSON.parse(readFileSync(join(b.ctx.cwd, '.pi', 'annotations', payload.id, 'annotations.json'), 'utf8'));
+  assert.equal(metadata.deliverAs, 'steer');
+  const retry = await targets.request(a.record, '/submit', { ...payload, deliverAs: 'followUp' });
+  assert.equal(retry.deliverAs, 'steer'); assert.equal(b.messages.length, 1);
+});
+test('legacy destination rejects steering instead of silently downgrading to follow-up', async () => {
+  const self = { id: randomUUID(), project: '/self', session: 'self' }, other = { id: randomUUID(), project: '/other', session: 'other' };
+  const route = targets.createRouting(self, { list: async () => [self, other], localSubmit: () => assert.fail('must not deliver locally'), send: () => assert.fail('must not deliver to legacy receiver') });
+  await route.select(other.id);
+  await assert.rejects(route.submit({ ...batch(), deliverAs: 'steer' }, other.id), /Reload Annotate/);
 });
 test('destination directory does not accept arbitrary URLs or path traversal', async () => {
   assert.throws(() => targets.advertise({ id: '../../oops' }), /Invalid/);

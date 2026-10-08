@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-const { displayBounds, desktopBounds, snapshotDesktop, waitForCapture } = createRequire(import.meta.url)('../app/capture-wlroots.cjs');
+const { displayBounds, desktopBounds, snapshotDesktop, waitForCapture, layoutKey } = createRequire(import.meta.url)('../app/capture-wlroots.cjs');
 const monitors = [{ x: -1920, y: 0, width: 1920, height: 1080, scale: 1, transform: 0 }, { x: 0, y: 0, width: 3840, height: 2160, scale: 2, transform: 0 }];
 test('preserved frame maps mixed-DPI and negative-origin displays to logical pixels', () => {
   const areas = displayBounds('hyprland', monitors);
+  assert.equal(layoutKey(areas), layoutKey([...areas].reverse().map(a => ({ ...a, workArea: 'changed' }))));
+  assert.notEqual(layoutKey(areas), layoutKey(areas.map(a => ({ ...a, width: a.width + 1 }))));
   assert.deepEqual(desktopBounds(areas), { x: -1920, y: 0, width: 3840, height: 1080 });
   assert.deepEqual(displayBounds('hyprland', [{ x: 0, y: -1920, width: 3840, height: 2160, scale: 2, transform: 1 }]), [{ x: 0, y: -1920, width: 1080, height: 1920 }]);
   assert.deepEqual(displayBounds('sway', [{ active: true, rect: areas[0] }, { active: false }]), [areas[0]]);
