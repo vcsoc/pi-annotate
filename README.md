@@ -1,4 +1,4 @@
-# Pi Annotate — v0.5.0
+# Pi Annotate — v0.6.0
 
 A floating Console for collecting application screenshots, highlighted areas and notes, then sending the complete batch to your selected active Pi project/session.
 
@@ -19,7 +19,7 @@ If you already have a manually copied/symlinked Annotate extension, disable it o
 ## Workflow
 
 1. Run `/annotate` to open **Annotate Console**, initially **400×600** logical desktop units. Drag its title bar to move it; drag its edges to resize. The Console’s size **and position** are saved in Electron’s user-data directory and restored after capture and on future launches. Disconnected displays or smaller work areas recover the window onscreen. On Hyprland/sway, placement uses compositor coordinates rather than Electron’s unreliable Wayland origin.
-2. Click **Capture**, or press **Ctrl+Shift+A** (Linux/Windows) / **⌘+Shift+A** (macOS). **Omarchy/Hyprland/sway:** **Live marking** is the default. Choose **Preserved frame** in Settings when you need to retain an open dropdown before marking takes focus. The Console button reads **Capture (1s)** by default: after clicking, return to the app and reopen its menu before the countdown finishes. Use the top-right **⚙ Settings** toggle to set a countdown from 0–30 seconds; settings persist across launches. Retake buttons use the same delay. Clicking the Console itself can dismiss a menu, so it cannot recover that already-dismissed state without reopening it. On macOS the selector remains non-activating and screenshots are taken after marking by native window ID; other native platforms retain their existing post-selection backend. Nothing is sent automatically.
+2. Click **Capture**, or press the capture shortcut shown in the title bar (by default **Ctrl+Shift+A** on Linux/Windows or **⌘+Shift+A** on macOS). **Omarchy/Hyprland/sway:** **Live marking** is the default. Choose **Preserved frame** in Settings when you need to retain an open dropdown before marking takes focus. The Console button reads **Capture (1s)** by default: after clicking, return to the app and reopen its menu before the countdown finishes. Use the top-right **⚙ Settings** toggle to set a countdown from 0–30 seconds; settings persist across launches. Retake buttons use the same delay. Clicking the Console itself can dismiss a menu, so it cannot recover that already-dismissed state without reopening it. On macOS the selector remains non-activating and screenshots are taken after marking by native window ID; other native platforms retain their existing post-selection backend. Nothing is sent automatically.
 3. Mark an area in an app:
    - **Omarchy/Hyprland/sway — Live (default):** Area uses `slurp` over the live app; Freehand uses transparent selectors. No frozen backdrop appears. The **whole application** is captured after marking, once selector surfaces close. Menus dismissed by selection may disappear from the evidence.
    - **Omarchy/Hyprland/sway — Preserved frame:** a preserved desktop frame appears at the original screen coordinates. Draw an Area or Freehand mark over it. The **whole application**, including its captured dropdown, is cropped from that same frame—not recaptured after the menu closes. Keep the app completely onscreen and unobscured. Marks outside one application are refused; popup content outside the application's bounds is not included.
@@ -47,6 +47,7 @@ Escape cancels the current selection/note without changing saved entries. Closin
 Use the top-right **⚙** button to open Settings:
 
 - **Capture mode:** **Live marking** (default) or **Preserved frame**, for Hyprland/sway. The preference applies to Capture, Retake and the shortcut. Other desktops keep native post-selection capture; the preserved-mode selector is disabled there without erasing its saved preference.
+- **Capture shortcut:** enter a combination like `CommandOrControl+Alt+A` and click **Save settings**. The new global shortcut takes effect immediately, without restarting Pi, and skips the countdown. If the OS or compositor rejects it, the previous shortcut stays active and the settings panel shows the error. Clear the field to restore the launch default.
 - **Capture countdown:** **1 second** by default, range **0–30 seconds**, for Capture and Retake buttons. The shortcut remains immediate in either mode.
 - **Maximum annotations:** default **8**, range **1–12**. Capture/Add/Send enforce it; retaking an existing entry remains allowed at capacity. Lowering below your current draft count is refused without discarding anything. The separate 12-item / 24-MiB transport ceilings remain.
 - **Default Send as:** Follow-up or Queued (steering). The Console's Send as selector remains a per-batch override and is not reset by routine refreshes.
@@ -82,7 +83,7 @@ Install on Linux, macOS or Windows using the same command:
 pi install https://github.com/vcsoc/pi-annotate
 ```
 
-For a project-only installation, use `pi install -l https://github.com/vcsoc/pi-annotate`. To pin a published release, append its tag or commit to the source URL (pinned versions do not automatically advance). The v0.5.0 feature set includes both wlroots capture modes, combined settings and delivery choices; confirm it is published before updating another machine.
+For a project-only installation, use `pi install -l https://github.com/vcsoc/pi-annotate`. To pin a published release, append its tag or commit to the source URL (pinned versions do not automatically advance).
 
 Update an unpinned installation:
 
@@ -136,7 +137,7 @@ Window placement uses PID/address-scoped temporary Hyprland/sway dispatches. The
 
 Other platforms retain Electron’s native global-shortcut registration; OS permissions and reserved shortcuts still apply. Wayland GlobalShortcutsPortal remains enabled for other compositor routes. Universal interception across secure OS screens is not promised. The Hyprland interception path has non-GUI regression coverage, but still needs live Firefox acceptance.
 
-To choose another shortcut before starting Pi:
+A saved **Capture shortcut** takes precedence over `PI_ANNOTATE_HOTKEY`. If the Settings field is blank, the launch default is `CommandOrControl+Shift+A` unless you set `PI_ANNOTATE_HOTKEY` before starting Pi:
 
 ```sh
 export PI_ANNOTATE_HOTKEY='CommandOrControl+Alt+A'

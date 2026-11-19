@@ -26,6 +26,7 @@ function controller(captureStubs = {}) {
   const electron = {
     app: { setName() {}, getPath: () => '/test-fixture-no-write', quit() { quits.push(true); }, commandLine: { appendSwitch: (key, value) => switches.set(key, value) }, whenReady: () => new Promise(() => {}), on() {} },
     ipcMain: { handle: (key, fn) => handlers.set(key, fn) },
+    globalShortcut: captureStubs.globalShortcut,
     nativeImage: { createFromDataURL: image => ({ resize: () => ({ toDataURL: () => image }) }), createFromBuffer: captureStubs.decode || (() => { throw new Error('Unexpected native image decode'); }) },
   };
   const context = vm.createContext({
@@ -34,12 +35,13 @@ function controller(captureStubs = {}) {
       if (name === 'electron') return electron;
       if (name === './capture-adapters.cjs') return { ...require(name), windowBoxes: captureStubs.windowBoxes || deny, selectRegion: captureStubs.selectRegion || deny, enforceFloating: deny, workAreas: captureStubs.workAreas || deny };
       if (name === './capture-wlroots.cjs') return { ...require(name), snapshotDesktop: captureStubs.snapshotDesktop || deny, readDisplayBounds: captureStubs.readDisplayBounds || deny, waitForCapture: captureStubs.waitForCapture || require(name).waitForCapture };
+      if (name === './hyprland-shortcut.cjs' && captureStubs.registerShortcut) return { ...require(name), registerShortcut: captureStubs.registerShortcut };
       if (name === './settings.cjs') return { ...require(name), saveSettings: captureStubs.saveSettings || require(name).saveSettings };
       if (name === './native-windows.cjs') return { ...require(name), nativeWindows: deny };
       if (name === 'node:child_process') return { execFile: captureStubs.execFile || ((...args) => args.at(-1)(new Error('Subprocesses are forbidden in controller tests'))) };
       return require(name);
     }, __dirname: dirname(filename), Buffer, console,
-    process: { platform: 'linux', pid: 123, env: { PI_ANNOTATE_URL: 'http://127.0.0.1:12345', PI_ANNOTATE_TOKEN: 'a'.repeat(64), WAYLAND_DISPLAY: 'test-only', XDG_CURRENT_DESKTOP: 'Hyprland' }, on() {}, exit() { throw new Error('Unexpected exit'); } },
+    process: { platform: 'linux', pid: 123, env: { PI_ANNOTATE_URL: 'http://127.0.0.1:12345', PI_ANNOTATE_TOKEN: 'a'.repeat(64), ...(!captureStubs.globalShortcut && { WAYLAND_DISPLAY: 'test-only', XDG_CURRENT_DESKTOP: 'Hyprland' }) }, on() {}, exit() { throw new Error('Unexpected exit'); } },
     setTimeout, clearTimeout, setImmediate: fn => deferred.push(fn), AbortController, AbortSignal,
     fetch: async (_url, options) => { submissions.push(JSON.parse(options.body)); return { ok: true, json: async () => ({ count: 1, savedTo: '/test' }) }; },
     consoleWindow, note,
@@ -207,7 +209,7 @@ test('combined settings persist atomically, enforce limits, retain drafts and pr
   assert.equal((await c.invoke('state')).settings.maxAnnotations, 8);
   await assert.rejects(c.invoke('settings', [{ countdownSeconds: 0 }]), /Only the Console/);
   await c.invoke('settings', [{ countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer' }], c.consoleWindow);
-  assert.deepEqual(saved, { countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer' });
+  assert.deepEqual(saved, { countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer', captureShortcut: '' });
   const items = [0, 1].map(i => ({ id: 'old-' + i, image: png(), comment: 'Keep me' })); c.seed(undefined, items);
   await assert.rejects(c.invoke('settings', [{ maxAnnotations: 1 }], c.consoleWindow), /Finish the current capture/);
   await assert.rejects(c.invoke('add', [{ image: png(), comment: 'Over limit' }]), /Batch limit/);
@@ -222,6 +224,36 @@ test('failed settings write keeps current settings and the batch', async () => {
   const c = controller({ saveSettings: () => { throw new Error('Disk unavailable'); } });
   await assert.rejects(c.invoke('settings', [{ captureMode: 'preserved' }], c.consoleWindow), /Disk unavailable/);
   assert.equal((await c.invoke('state')).settings.captureMode, 'live');
+});
+for (const hyprland of [true, false]) test(`changing capture shortcuts is immediate and transactional (${hyprland ? 'Hyprland' : 'Electron'})`, async () => {
+  const launch = 'CommandOrControl+Shift+A', custom = 'Control+Alt+F9', conflict = 'Control+Alt+F8', diskFailure = 'Control+Alt+F7';
+  const active = new Map(), calls = [];
+  const register = (value, callback) => { if (value === conflict) return false; active.set(value, callback); return true; };
+  const c = controller({
+    ...(hyprland ? { registerShortcut: async (value, callback) => {
+      if (!register(value, callback)) throw new Error('Already bound');
+      return { stop: async () => { active.delete(value); } };
+    } } : { globalShortcut: { register, unregister: value => active.delete(value) } }),
+    saveSettings: (_file, next) => { if (next.captureShortcut === diskFailure) throw new Error('Disk unavailable'); return next; },
+  });
+  c.context.calls = calls;
+  await c.evaluate(`info.shortcut = '${launch}'; settings.countdownSeconds = 30; capture = options => calls.push(options.delayMs); registerCaptureShortcut(captureShortcut()).then(owner => { shortcutOwner = owner; });`);
+  const save = captureShortcut => c.invoke('settings', [{ captureShortcut }], c.consoleWindow);
+  const stale = active.get(launch);
+  await save('ctrl+shift+a'); // Alias for the current launch binding; no re-registration.
+  assert.equal(active.get(launch), stale);
+  await save(custom);
+  assert.deepEqual([...active.keys()], [custom]);
+  stale(); active.get(custom)();
+  assert.deepEqual(calls, [0]);
+  await assert.rejects(save(conflict), /Already bound|already in use/);
+  await assert.rejects(save(diskFailure), /Disk unavailable/);
+  const state = await c.invoke('state');
+  assert.equal(state.shortcut, custom); assert.equal(state.settings.captureShortcut, custom); assert.equal(state.shortcutReady, true);
+  assert.deepEqual([...active.keys()], [custom]);
+  await save('');
+  assert.equal((await c.invoke('state')).shortcut, launch);
+  assert.deepEqual([...active.keys()], [launch]);
 });
 test('Send forwards both visible destination and mode; invalid modes keep drafts', async () => {
   const c = controller(); c.seed(); await c.invoke('add', [{ image: png(), comment: 'Ready' }]); c.flush();

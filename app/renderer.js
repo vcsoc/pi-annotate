@@ -71,7 +71,7 @@ if (page === 'toolbar') {
   async function refresh() {
     if (refreshing) { again = true; return; } refreshing = true;
     try {
-      state = await api.state(); const disabled = state.sending || state.capturing || changingTarget;
+      state = await api.state(); const disabled = state.sending || state.capturing || state.updatingShortcut || changingTarget;
       const seconds = state.settings?.countdownSeconds ?? 1;
       $('capture').textContent = seconds ? `＋ Capture (${seconds}s)` : '＋ Capture';
       const mode = state.preservedCaptureAvailable && state.settings.captureMode === 'preserved' ? 'Preserved frame' : 'Live marking';
@@ -79,7 +79,7 @@ if (page === 'toolbar') {
       $('save-settings').disabled = $('cancel-settings').disabled = disabled || settingsSaving;
       $('toggle-settings').disabled = disabled || settingsSaving;
       $('capture-mode').disabled = disabled || settingsSaving || !state.preservedCaptureAvailable;
-      for (const id of ['capture-countdown', 'max-annotations', 'default-delivery']) $(id).disabled = disabled || settingsSaving;
+      for (const id of ['capture-shortcut', 'capture-countdown', 'max-annotations', 'default-delivery']) $(id).disabled = disabled || settingsSaving;
       $('delivery-mode').disabled = disabled || settingsSaving;
       if (appliedDefault !== state.settings.defaultDeliverAs) {
         $('delivery-mode').value = state.settings.defaultDeliverAs;
@@ -102,7 +102,8 @@ if (page === 'toolbar') {
       }
       $('project').value = state.destinationId;
       $('project').title = state.project; $('project').disabled = disabled;
-      $('shortcut').textContent = state.shortcutReady ? state.shortcut.replace('CommandOrControl', /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl') : 'Use Capture';
+      $('shortcut').textContent = state.shortcutReady ? state.shortcut.replace(/CommandOrControl|CmdOrCtrl/gi, /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl') : 'Use Capture';
+      $('shortcut').title = state.shortcutReady ? 'Start capture immediately' : `Capture shortcut unavailable: ${state.shortcut}`;
       $('send').disabled = disabled || !state.destinationAvailable || !state.drafts.length || state.drafts.some(d => !d.comment.trim());
       $('send-count').textContent = String(state.drafts.length);
       $('send').title = state.sending ? 'Sending annotations…' : `Send all ${state.drafts.length} annotations to ${state.project}`;
@@ -149,6 +150,8 @@ if (page === 'toolbar') {
   action('toggle-settings', () => {
     if (settingsSaving || state.sending || state.capturing || changingTarget) return;
     if (!$('settings').hidden) { closeSettings(); return; }
+    $('capture-shortcut').value = state.settings.captureShortcut;
+    $('capture-shortcut').placeholder = state.defaultShortcut;
     $('capture-countdown').value = state.settings.countdownSeconds;
     $('capture-mode').value = state.settings.captureMode;
     $('max-annotations').value = state.settings.maxAnnotations;
@@ -156,15 +159,16 @@ if (page === 'toolbar') {
     $('settings-status').textContent = '';
     $('settings').hidden = false;
     $('toolbar').classList.toggle('settings-open', true);
-    $('toggle-settings').setAttribute('aria-expanded', 'true'); $('capture-countdown').focus();
+    $('toggle-settings').setAttribute('aria-expanded', 'true'); $('capture-shortcut').focus();
   });
   action('cancel-settings', closeSettings);
   action('save-settings', async () => {
     if (settingsSaving || state.sending || state.capturing || changingTarget) return;
     for (const id of ['capture-countdown', 'max-annotations']) if (!$(id).value || !$(id).reportValidity()) return;
     settingsSaving = true; $('save-settings').disabled = $('cancel-settings').disabled = true;
+    $('settings-status').textContent = 'Saving settings…';
     try {
-      await api.settings({ countdownSeconds: Number($('capture-countdown').value), captureMode: $('capture-mode').value, maxAnnotations: Number($('max-annotations').value), defaultDeliverAs: $('default-delivery').value });
+      await api.settings({ captureShortcut: $('capture-shortcut').value, countdownSeconds: Number($('capture-countdown').value), captureMode: $('capture-mode').value, maxAnnotations: Number($('max-annotations').value), defaultDeliverAs: $('default-delivery').value });
       await refresh(); closeSettings();
     } catch (error) { $('settings-status').textContent = error.message || String(error); }
     finally { settingsSaving = false; await refresh().catch(report); }

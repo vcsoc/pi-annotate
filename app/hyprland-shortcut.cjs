@@ -16,12 +16,12 @@ function accelerator(value) {
   const aliases = { ctrl: ['CTRL', 4], control: ['CTRL', 4], commandorcontrol: ['CTRL', 4], shift: ['SHIFT', 1], alt: ['ALT', 8], super: ['SUPER', 64], meta: ['SUPER', 64] };
   const modifiers = new Map();
   for (const part of parts) {
-    const modifier = aliases[part.toLowerCase()];
+    const modifier = Object.hasOwn(aliases, part.toLowerCase()) && aliases[part.toLowerCase()];
     if (!modifier) throw new Error(`Unsupported shortcut modifier: ${part}`);
     modifiers.set(...modifier);
   }
   const named = { space: 'space', escape: 'Escape', enter: 'Return', tab: 'Tab', backspace: 'BackSpace', delete: 'Delete', home: 'Home', end: 'End', pageup: 'Prior', pagedown: 'Next', left: 'Left', right: 'Right', up: 'Up', down: 'Down' };
-  const key = /^[a-z0-9]$/i.test(input) || /^F(?:[1-9]|1\d|2[0-4])$/i.test(input) ? input.toUpperCase() : named[input?.toLowerCase()];
+  const key = /^[a-z0-9]$/i.test(input) || /^F(?:[1-9]|1\d|2[0-4])$/i.test(input) ? input.toUpperCase() : Object.hasOwn(named, input.toLowerCase()) && named[input.toLowerCase()];
   if (!key || !modifiers.size) throw new Error('Use a modified letter, number, function key or named navigation key for the Annotate shortcut');
   const mods = [...modifiers.keys()].sort();
   return { key, mask: [...modifiers.values()].reduce((a, b) => a | b, 0), chord: [...mods, key].join(' + ') };
@@ -87,7 +87,7 @@ async function installShortcut(shortcut, capture, run = runCommand, failure = ()
       await removeBinding({ ...spec, description: existing[0].description }, run);
       existing = matching(JSON.parse((await run('hyprctl', ['-j', 'binds'])).stdout), spec);
     }
-    if (existing.length) throw new Error(`${shortcut} already has a desktop binding. Annotate will not replace it; choose PI_ANNOTATE_HOTKEY or close the other Console.`);
+    if (existing.length) throw new Error(`${shortcut} already has a desktop binding. Annotate will not replace it; choose another shortcut in Settings or close the other Console.`);
     await run('curl', ['--version']);
     const config = join(directory, 'trigger.conf');
     writeFileSync(config, `url = "http://localhost/capture"\nabstract-unix-socket = "${socket}"\nrequest = "POST"\nheader = "X-Pi-Annotate-Shortcut: ${secret}"\nproxy = ""\nnoproxy = "*"\nconnect-timeout = 1\nmax-time = 2\nsilent\noutput = "/dev/null"\n`, { mode: 0o600 });
@@ -127,7 +127,7 @@ async function installShortcut(shortcut, capture, run = runCommand, failure = ()
     return { descriptor, stop };
   } catch (error) {
     await stop().catch(() => {});
-    if (error.code === 'EADDRINUSE') throw new Error(`Another Annotate Console owns ${shortcut}. Close it first or choose PI_ANNOTATE_HOTKEY.`);
+    if (error.code === 'EADDRINUSE') throw new Error(`Another Annotate Console owns ${shortcut}. Close it first or choose another shortcut in Settings.`);
     throw error;
   }
 }
@@ -156,6 +156,7 @@ function registerShortcut(shortcut, capture, failed) {
   return new Promise((resolve, reject) => {
     const child = fork(__filename, [shortcut], { execPath: process.execPath, execArgv: [], env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
     child.stderr.on('data', data => console.error('Annotate shortcut:', data.toString().trim()));
+    const closed = new Promise(resolve => child.once('close', resolve));
     let ready = false, stopping = false, descriptor;
     const timer = setTimeout(() => { stopping = true; if (child.connected) child.disconnect(); reject(new Error('Annotate desktop shortcut registration timed out')); }, 12000);
     child.on('error', error => { clearTimeout(timer); reject(error); });
@@ -171,7 +172,7 @@ function registerShortcut(shortcut, capture, failed) {
         descriptor = message.descriptor; clearTimeout(timer);
         if (stopping) { if (child.connected) child.disconnect(); return; }
         ready = true;
-        resolve({ stop() { stopping = true; if (child.connected) child.disconnect(); } });
+        resolve({ stop() { stopping = true; if (child.connected) child.disconnect(); return closed; } });
       }
     });
     child.on('exit', () => {
@@ -179,7 +180,7 @@ function registerShortcut(shortcut, capture, failed) {
       if (!ready) reject(new Error('Annotate shortcut helper exited before registration'));
       if (ready && !stopping) {
         if (descriptor) void cleanup(descriptor).catch(console.error);
-        failed(new Error('Annotate shortcut helper stopped. Restart /annotate to restore its shortcut.'));
+        failed(new Error('Annotate shortcut helper stopped. Restart /annotate or choose another shortcut in Settings.'));
       }
     });
   });

@@ -1,6 +1,6 @@
 {
   "name": "pi-annotate",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "main": "app/main.cjs",
@@ -9,7 +9,7 @@
   "repository": { "type": "git", "url": "https://github.com/vcsoc/pi-annotate.git" },
   "homepage": "https://github.com/vcsoc/pi-annotate#readme",
   "bugs": { "url": "https://github.com/vcsoc/pi-annotate/issues" },
-  "files": ["index.ts", "*.mjs", "app/", "test/", "README.md"],
+  "files": ["index.ts", "*.mjs", "app/", "test/", "README.md", "CHANGELOG.md"],
   "pi": { "extensions": ["./index.ts"] },
   "peerDependencies": { "@earendil-works/pi-coding-agent": "*" },
   "peerDependenciesMeta": { "@earendil-works/pi-coding-agent": { "optional": true } },

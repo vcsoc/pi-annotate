@@ -9,11 +9,11 @@ const end = source.indexOf('// Both the adjacent', start);
 async function renderer() {
   const nodes = new Map(), handlers = new Map(), keyboard = new Map(), sent = [];
   let onChange, saves = 0, failure;
-  const state = { project: '/test', settings: { countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp' }, preservedCaptureAvailable: true, drafts: [], shortcut: 'Cmd+A', shortcutReady: true, sending: false, capturing: false, backend: 'hyprland', destinations: [{ id: 'test', project: '/test' }], destinationId: 'test', destinationAvailable: true };
+  const state = { project: '/test', settings: { countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp', captureShortcut: '' }, defaultShortcut: 'CommandOrControl+Shift+A', preservedCaptureAvailable: true, drafts: [], shortcut: 'Cmd+A', shortcutReady: true, sending: false, capturing: false, backend: 'hyprland', destinations: [{ id: 'test', project: '/test' }], destinationId: 'test', destinationAvailable: true };
   function element() { return { value: '', hidden: false, disabled: false, dataset: {}, children: [], attributes: {}, textContent: '', title: '', classList: { toggle() {} }, append(...items) { this.children.push(...items); }, replaceChildren(...items) { this.children = items; }, setAttribute(k, v) { this.attributes[k] = v; }, addEventListener() {}, focus() { this.focused = true; }, reportValidity: () => true }; }
   const $ = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
   $('settings').hidden = true;
-  const api = { state: async () => structuredClone(state), onChange: fn => { onChange = fn; }, onNotice() {}, async settings(next) { saves++; if (failure) throw new Error(failure); state.settings = { ...next }; }, select: async () => {}, target: async () => {}, send: async (...args) => sent.push(args) };
+  const api = { state: async () => structuredClone(state), onChange: fn => { onChange = fn; }, onNotice() {}, async settings(next) { saves++; if (failure) throw new Error(failure); state.settings = { ...next }; state.shortcut = next.captureShortcut || state.defaultShortcut; }, select: async () => {}, target: async () => {}, send: async (...args) => sent.push(args) };
   await vm.runInNewContext('(async()=>{' + source.slice(start, end) + '})()', { page: 'toolbar', api, $, document: { createElement: element }, window: { addEventListener: (key, fn) => keyboard.set(key, fn) }, navigator: { platform: 'Mac' }, projectLabel: path => path, action: (id, fn) => handlers.set(id, fn), report: error => { throw error; } });
   return { $, state, handlers, sent, keyboard, get saves() { return saves; }, fail: text => { failure = text; }, async refresh() { onChange(); await new Promise(resolve => setImmediate(resolve)); } };
 }
@@ -22,13 +22,18 @@ test('settings combine live/preserved, countdown, limits and delivery default wi
   assert.equal(r.$('delivery-mode').value, 'followUp');
   await r.handlers.get('toggle-settings')();
   assert.equal(r.$('capture-mode').value, 'live'); assert.equal(r.$('max-annotations').value, 8);
+  assert.equal(r.$('capture-shortcut').placeholder, r.state.defaultShortcut);
+  r.$('capture-shortcut').value = 'Control+F8';
   r.$('capture-mode').value = 'preserved'; r.$('max-annotations').value = 3;
   await r.handlers.get('cancel-settings')(); assert.equal(r.saves, 0);
   await r.handlers.get('toggle-settings')();
+  assert.equal(r.$('capture-shortcut').value, '');
+  r.$('capture-shortcut').value = 'Control+Alt+F9';
   r.$('capture-countdown').value = 4; r.$('capture-mode').value = 'preserved'; r.$('max-annotations').value = 4; r.$('default-delivery').value = 'steer';
   await r.handlers.get('save-settings')();
   assert.equal(r.saves, 1);
-  assert.deepEqual(r.state.settings, { countdownSeconds: 4, captureMode: 'preserved', maxAnnotations: 4, defaultDeliverAs: 'steer' });
+  assert.deepEqual(r.state.settings, { countdownSeconds: 4, captureMode: 'preserved', maxAnnotations: 4, defaultDeliverAs: 'steer', captureShortcut: 'Control+Alt+F9' });
+  assert.equal(r.$('shortcut').textContent, 'Control+Alt+F9');
   assert.equal(r.$('settings').hidden, true); assert.equal(r.$('delivery-mode').value, 'steer');
   assert.match(r.$('capture').title, /Preserved frame/);
 });

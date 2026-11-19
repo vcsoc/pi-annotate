@@ -11,6 +11,9 @@
   <p id="notice" role="status">Capture → mark an app area → add a note → ✓ save here. Send only when ready.</p>
   <div id="settings" hidden>
     <h2>Settings</h2>
+    <label for="capture-shortcut">Capture shortcut</label>
+    <input id="capture-shortcut" type="text" maxlength="128" spellcheck="false" autocomplete="off" aria-describedby="capture-shortcut-help">
+    <p id="capture-shortcut-help" class="muted">Type a shortcut like CommandOrControl+Alt+A. Clear it to use the launch default shown in the field. The shortcut starts capture immediately.</p>
     <label for="capture-countdown">Capture countdown (seconds)</label>
     <input id="capture-countdown" type="number" min="0" max="30" step="1" value="1">
     <p class="muted">Wait before Capture or Retake so you can reopen a menu. Set 0 for no delay. The keyboard shortcut always captures immediately.</p>

@@ -25,16 +25,19 @@ test('settings toggle, credit and explicit GitHub link are present', () => {
 test('combined defaults, strict validation, private atomic persistence and legacy preference migration', t => {
   const dir = mkdtempSync(join(tmpdir(), 'annotate-settings-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
   const file = join(dir, 'settings.json');
-  assert.deepEqual(loadSettings(file), { countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp' });
+  assert.deepEqual(loadSettings(file), { countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp', captureShortcut: '' });
   writeFileSync(file, JSON.stringify({ countdownSeconds: 7 }));
   writeFileSync(join(dir, 'annotation-settings.json'), JSON.stringify({ maxAnnotations: 4, defaultDeliverAs: 'steer' }));
-  assert.deepEqual(loadSettings(file), { countdownSeconds: 7, captureMode: 'live', maxAnnotations: 4, defaultDeliverAs: 'steer' });
-  const next = { countdownSeconds: 0, captureMode: 'preserved', maxAnnotations: 12, defaultDeliverAs: 'followUp' };
+  assert.deepEqual(loadSettings(file), { countdownSeconds: 7, captureMode: 'live', maxAnnotations: 4, defaultDeliverAs: 'steer', captureShortcut: '' });
+  const next = { countdownSeconds: 0, captureMode: 'preserved', maxAnnotations: 12, defaultDeliverAs: 'followUp', captureShortcut: 'CommandOrControl+Alt+F9' };
   saveSettings(file, next); assert.deepEqual(loadSettings(file), next);
   if (process.platform !== 'win32') assert.equal(statSync(file).mode & 0o777, 0o600);
   assert.equal(readdirSync(dir).some(name => name.endsWith('.tmp')), false);
-  for (const change of [{ captureMode: 'frozen' }, { maxAnnotations: 0 }, { maxAnnotations: 13 }, { maxAnnotations: 1.5 }, { maxAnnotations: '8' }, { defaultDeliverAs: 'abort' }]) {
+  for (const change of [{ captureMode: 'frozen' }, { maxAnnotations: 0 }, { maxAnnotations: 13 }, { maxAnnotations: 1.5 }, { maxAnnotations: '8' }, { defaultDeliverAs: 'abort' }, { captureShortcut: 4 }, { captureShortcut: 'Ctrl++' }, { captureShortcut: 'A' }]) {
     assert.throws(() => saveSettings(file, { ...next, ...change })); assert.deepEqual(loadSettings(file), next);
   }
+  writeFileSync(file, JSON.stringify({ ...next, captureShortcut: 'A' }));
+  assert.deepEqual(loadSettings(file), { ...next, captureShortcut: '' });
+  assert.equal(validateSettings({ ...next, captureShortcut: 'Ctrl + Alt + F8' }).captureShortcut, 'Ctrl+Alt+F8');
   writeFileSync(file, 'corrupt'); assert.equal(loadSettings(file).captureMode, 'live');
 });
