@@ -48,3 +48,12 @@ test('both Console designs are styled: timeline feed panel and command pill bar 
   assert.match(css, /\.layout-pill\{[^}]*grid-template-areas/);
   assert.match(css, /\.layout-pill\.tray-open\{/);
 });
+test('overlay windows are transparent from their first paint (no full-screen flash on Capture)', () => {
+  const early = readFileSync(new URL('../app/early.js', import.meta.url), 'utf8');
+  // Classic script in <head>, before the stylesheet, so it runs before the first paint.
+  assert.ok(html.indexOf('<script src="early.js"></script>') < html.indexOf('<link rel="stylesheet"'));
+  assert.ok(html.indexOf('<script src="early.js"></script>') < html.indexOf('</head>'));
+  const pages = page => /[?&]page=(?:desktop|mark)(?:&|$)/.test(`?page=${page}`);
+  assert.match(early, /page=\(\?:desktop\|mark\)/);
+  assert.deepEqual(['desktop', 'mark', 'toolbar', 'note', 'popup'].map(pages), [true, true, false, false, false]);
+});

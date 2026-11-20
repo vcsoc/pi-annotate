@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+
+- Fixed a full-screen flash on every display when Capture starts (and again after marking). The marking overlay and highlight windows briefly showed the Console's dark background before turning transparent. They are now transparent from their first frame.
+
 ## 0.8.0
 
 - The capture shortcut and the Global switch are saved and applied as soon as you set them. A confirmation (or an error) appears directly under the field. Previously the recorded keys were only kept after **Save settings**, so leaving Settings any other way lost them.

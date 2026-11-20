@@ -1,4 +1,4 @@
-# Pi Annotate — v0.8.0
+# Pi Annotate — v0.8.1
 
 A floating Console for collecting application screenshots, highlighted areas and notes, then sending the complete batch to your selected active Pi project/session.
 
