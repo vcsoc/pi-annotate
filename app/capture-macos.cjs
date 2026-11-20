@@ -18,4 +18,16 @@ async function captureMacWindow(nativeId, signal, run = exec) {
     return await readFile(file);
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
-module.exports = { captureMacWindow };
+// Screen rectangle (global points) for a mark extended past its app window.
+async function captureMacRegion(rect, signal, run = exec) {
+  if (!['x', 'y', 'width', 'height'].every(k => Number.isFinite(rect?.[k])) || rect.width < 1 || rect.height < 1) throw new Error('Invalid capture area');
+  if (signal?.aborted) throw new Error('Capture cancelled');
+  const directory = await mkdtemp(join(tmpdir(), 'pi-annotate-region-'));
+  try {
+    const file = join(directory, 'region.png');
+    await run('/usr/sbin/screencapture', ['-x', '-R', [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(','), '-t', 'png', file], { timeout: 15000, signal, maxBuffer: 1024 * 1024 });
+    if (signal?.aborted) throw new Error('Capture cancelled');
+    return await readFile(file);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+}
+module.exports = { captureMacWindow, captureMacRegion };

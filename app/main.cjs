@@ -11,7 +11,7 @@ const { consolePlacement } = require('./console-placement.cjs');
 const { PILL_SIZES, TIMELINE_MIN, TIMELINE_HEIGHT_RATIO, DETAIL_SIZE, layoutBounds, besideBounds } = require('./console-layout.cjs');
 const { accelerator: hyprlandAccelerator, registerShortcut: registerHyprlandShortcut } = require('./hyprland-shortcut.cjs');
 const { nativeWindows, sourceForWindow } = require('./native-windows.cjs');
-const { captureMacWindow } = require('./capture-macos.cjs');
+const { captureMacWindow, captureMacRegion } = require('./capture-macos.cjs');
 const { selection: desktopMark, pointsInApp } = require('./desktop-selection.cjs');
 const selectors = new Map(), paintedSelectors = new Set();
 const { waitForCapture, snapshotDesktop, readDisplayBounds, layoutKey } = require('./capture-wlroots.cjs');
@@ -39,7 +39,7 @@ let consoleState, initialConsoleBounds, closingConsole = false, shortcutOwner, u
 // Command pill size state (collapsed bar, open tray or settings) and the timeline's detail popup.
 let pillMode = 'collapsed', detailWindow, detailId;
 // Last mark tool (Area/Freehand); the keyboard shortcut and the on-screen selector reuse it.
-let captureKind = 'rectangle';
+let captureKind = 'freehand';
 // Drafts keep an unmarked `base` screenshot in memory so marks can be redrawn; it is never sent.
 const wire = list => list.map(({ base, ...item }) => item);
 const marksOf = item => item.marks?.length ? item.marks : [{ kind: item.kind, points: item.points, comment: item.comment }];
@@ -310,6 +310,24 @@ async function portalCapture() {
     captureWindow.once('closed', () => { if (captureWindow) cancelPortal?.(); });
   });
 }
+// Marks that cross the app edge follow Settings: trimmed to the app, or the capture extends.
+const overflowLabel = (choice, app) => choice.adjusted === 'extended' ? `${app.label} · whole application + marked surroundings` : `${app.label} · whole application${choice.adjusted === 'clipped' ? ' (mark trimmed to the app)' : ''}`;
+async function markPoints(choice, kind, convert) {
+  const { validateMark, clampPoints } = await workflow;
+  const relative = convert(choice.target);
+  return validateMark(kind, choice.adjusted === 'clipped' ? clampPoints(relative) : relative);
+}
+// Windows/X11: crop an extended capture from the display that contains it.
+async function captureScreenRect(rect) {
+  const display = screen.getDisplayMatching(rect), b = display.bounds;
+  if (rect.x < b.x || rect.y < b.y || rect.x + rect.width > b.x + b.width || rect.y + rect.height > b.y + b.height) throw new Error('The extended capture spans several displays. Keep the mark on one display, or choose Trim in Settings.');
+  const scale = display.scaleFactor || 1;
+  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: Math.round(b.width * scale), height: Math.round(b.height * scale) } });
+  const source = sources.find(s => String(s.display_id) === String(display.id)) || (sources.length === 1 && sources[0]);
+  if (!source) throw new Error('The display for the extended capture is not available. Check screen recording permission.');
+  const ratio = source.thumbnail.getSize().width / b.width;
+  return source.thumbnail.crop({ x: Math.round((rect.x - b.x) * ratio), y: Math.round((rect.y - b.y) * ratio), width: Math.round(rect.width * ratio), height: Math.round(rect.height * ratio) });
+}
 async function capture(options = {}) {
   if (busy()) return;
   capturing = true; captureAbort = new AbortController(); changed();
@@ -333,17 +351,18 @@ async function capture(options = {}) {
       const boxes = await windowBoxes(backend, process.pid);
       if (!boxes.length) throw new Error('No application windows are available. Bring the app onscreen.');
       captureLayout = layoutKey(await readDisplayBounds(backend, { signal: captureAbort.signal }));
-      const { applicationForRegion, validateMark, relativeMark } = await workflow;
+      const { targetForMark, relativeMark } = await workflow;
+      const overflow = { overflow: settings.markOverflow };
       if (settings.captureMode === 'preserved') {
         // Preserve menus before selector focus; evidence and backdrop share one frame.
         const frame = await snapshotDesktop(backend, { decode: buffer => nativeImage.createFromBuffer(buffer), signal: captureAbort.signal });
         captureLayout = layoutKey(frame.areas);
         const marked = await selectOnDesktop(kind, frame);
         region = marked.region;
-        const target = applicationForRegion(region, boxes);
-        const points = validateMark(marked.kind, pointsInApp(marked.points, target));
+        const choice = targetForMark(region, boxes, { ...overflow, start: marked.points[0] });
+        const points = await markPoints(choice, marked.kind, target => pointsInApp(marked.points, target));
         liveMarkPoints = pointsInApp(marked.points, region);
-        result = { kind: marked.kind, image: frame.crop(target), source: `${target.label} · whole application (preserved before marking)`, needsAppBounds: false, points };
+        result = { kind: marked.kind, image: frame.crop(choice.target), source: `${overflowLabel(choice, choice.app)} (preserved before marking)`, needsAppBounds: false, points };
       } else {
         // Live is the default: no frozen backdrop; take evidence after marking.
         let marked;
@@ -355,11 +374,11 @@ async function capture(options = {}) {
           region = marked.region;
           liveMarkPoints = pointsInApp(marked.points, region);
         }
-        const target = applicationForRegion(region, await windowBoxes(backend, process.pid));
-        const points = validateMark(marked?.kind || kind, marked ? pointsInApp(marked.points, target) : relativeMark(region, target));
+        const choice = targetForMark(region, await windowBoxes(backend, process.pid), { ...overflow, start: marked?.points[0] || [region.x, region.y] });
+        const points = await markPoints(choice, marked?.kind || kind, target => marked ? pointsInApp(marked.points, target) : relativeMark(region, target));
         await delay(150); // Remove selector surfaces before taking the evidence image.
-        const shot = await exec('grim', ['-s', '1', '-g', geometry(target), '-'], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 15000, signal: captureAbort.signal });
-        result = { kind: marked?.kind || kind, image: nativeImage.createFromBuffer(shot.stdout), source: `${target.label} · whole application`, needsAppBounds: false, points };
+        const shot = await exec('grim', ['-s', '1', '-g', geometry(choice.target), '-'], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 15000, signal: captureAbort.signal });
+        result = { kind: marked?.kind || kind, image: nativeImage.createFromBuffer(shot.stdout), source: overflowLabel(choice, choice.app), needsAppBounds: false, points };
       }
     } else {
       if (wayland && !backend) throw new Error('This Wayland compositor does not expose the window geometry/overlay placement needed for direct desktop marking. A compositor integration is required; Annotate will not silently switch to a different editor workflow.');
@@ -371,23 +390,26 @@ async function capture(options = {}) {
       const candidates = await nativeWindows(process.platform, process.pid, screen, captureAbort.signal);
       if (!candidates.length) throw new Error('No application windows are available. Check capture permission and bring the app onscreen.');
       const marked = await selectOnDesktop(kind);
-      const { applicationForRegion, validateMark } = await workflow;
-      const target = applicationForRegion(marked.region, candidates);
+      const { targetForMark } = await workflow;
+      const choice = targetForMark(marked.region, candidates, { overflow: settings.markOverflow, start: marked.points[0] });
+      const target = choice.app;
       region = marked.region;
-      const points = validateMark(marked.kind, pointsInApp(marked.points, target));
+      const points = await markPoints(choice, marked.kind, box => pointsInApp(marked.points, box));
       liveMarkPoints = pointsInApp(marked.points, region);
       await delay(250); // Remove every selector before capturing the application.
       let image;
       const current = await nativeWindows(process.platform, process.pid, screen, captureAbort.signal);
       const same = current.find(w => w.nativeId === target.nativeId);
       if (!same || ['x', 'y', 'width', 'height'].some(key => Math.abs(same[key] - target[key]) > 1)) throw new Error('The marked application moved or closed during selection. Capture again.');
-      if (process.platform === 'darwin') {
+      if (choice.adjusted === 'extended') {
+        image = process.platform === 'darwin' ? nativeImage.createFromBuffer(await captureMacRegion(choice.target, captureAbort.signal)) : await captureScreenRect(choice.target);
+      } else if (process.platform === 'darwin') {
         image = nativeImage.createFromBuffer(await captureMacWindow(target.nativeId, captureAbort.signal));
       } else {
         const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1920 } });
         image = sourceForWindow(sources, target).thumbnail;
       }
-      result = { kind: marked.kind, image, source: `${target.label} · whole application`, needsAppBounds: false, points };
+      result = { kind: marked.kind, image, source: overflowLabel(choice, target), needsAppBounds: false, points };
     }
     if (captureAbort.signal.aborted) throw new Error('Capture cancelled');
     if (!quitting) {
@@ -430,12 +452,15 @@ handle('settings', async (event, value) => {
       }
     }
     const layoutChanged = next.consoleLayout !== settings.consoleLayout;
+    if (next.markTool !== settings.markTool) captureKind = next.markTool;
     settings = saveSettings(file, next);
     if (layoutChanged) { pillMode = 'collapsed'; closeDetail(); await relayoutConsole().catch(error => status(`Console positioning: ${error.message}`)); }
     if (candidate) {
       const previous = shortcutOwner;
       shortcutOwner = candidate; candidate = undefined;
       await releaseShortcut(previous);
+      // Still recording in Settings: keep the new OS binding paused until the field loses focus.
+      if (recordingShortcut && shortcutOwner.global) shortcutOwner.pause?.();
     }
     status('Settings saved.'); return settings;
   } finally {
@@ -624,6 +649,7 @@ handle('send', async (_event, expectedDestination, deliverAs = settings.defaultD
 handle('quit', () => toolbar.close());
 app.whenReady().then(async () => {
   settings = loadSettings(join(app.getPath('userData'), 'settings.json'));
+  captureKind = settings.markTool;
   info = await api('/session');
   await refreshTargets();
   const cancelChangedDisplay = async () => {

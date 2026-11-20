@@ -49,3 +49,19 @@ test('marks validate against the full app coordinate space', () => {
   assert.equal(validateMark('freehand', [[.1, .2], [.5, .7], [.8, .3]]).length, 3);
   for (const [kind, points] of [['crop', [[0, 0], [1, 1]]], ['rectangle', [[0, 0], [NaN, 1]]], ['rectangle', [[0, 0], [2, 1]]], ['rectangle', [[0, 0], [.001, .001]]]]) assert.throws(() => validateMark(kind, points));
 });
+import { targetForMark, clampPoints } from '../app/workflow.mjs';
+test('marks crossing the app edge are trimmed to the starting app or extend the capture', () => {
+  const app = { x: 100, y: 100, width: 400, height: 300, label: 'App', nativeId: '7' }, other = { x: 520, y: 100, width: 300, height: 300, label: 'Other' };
+  const inside = { x: 150, y: 150, width: 100, height: 100 };
+  assert.deepEqual(targetForMark(inside, [app, other]), { app, target: app, adjusted: false });
+  const crossing = { x: 450, y: 200, width: 150, height: 100 };
+  const clipped = targetForMark(crossing, [app, other], { overflow: 'clip', start: [460, 210] });
+  assert.equal(clipped.app, app); assert.equal(clipped.target, app); assert.equal(clipped.adjusted, 'clipped');
+  // Without a start point inside a window, the window it overlaps most wins.
+  assert.equal(targetForMark(crossing, [app, other], { overflow: 'clip', start: [510, 210] }).app, other);
+  const extended = targetForMark({ x: 450, y: 50, width: 120, height: 100 }, [app], { overflow: 'extend', start: [460, 140] });
+  assert.equal(extended.adjusted, 'extended'); assert.equal(extended.target.nativeId, '7');
+  assert.deepEqual([extended.target.x, extended.target.y, extended.target.width, extended.target.height], [100, 50, 470, 350]);
+  assert.throws(() => targetForMark({ x: 900, y: 900, width: 50, height: 50 }, [app]), /Start the mark inside/);
+  assert.deepEqual(clampPoints([[-0.2, 0.5], [1.3, 1]]), [[0, 0.5], [1, 1]]);
+});

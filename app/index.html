@@ -5,7 +5,7 @@
 <body>
 <section id="toolbar" class="layout-timeline" hidden>
   <header class="drag console-title"><span class="grip" aria-hidden="true">⋮⋮</span><strong class="console-name">✎ <span>Annotate Console</span></strong><span id="shortcut" class="badge"></span><button id="toggle-settings" class="icon" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings">⚙</button><button id="close-console" class="icon" aria-label="Close Annotate Console">×</button></header>
-  <div class="capture-split"><button id="capture" class="primary">＋ Capture</button><select id="capture-kind" aria-label="Mark tool"><option value="rectangle">▭ Area</option><option value="freehand">✎ Freehand</option></select></div>
+  <div class="capture-split"><button id="capture" class="primary">＋ Capture</button><select id="capture-kind" aria-label="Mark tool"><option value="freehand">✎ Freehand</option><option value="rectangle">▭ Area</option></select></div>
   <button id="tray-toggle" class="meter" aria-expanded="false" aria-controls="console-body" title="Show annotations"><span id="meter-dots" aria-hidden="true"></span><span id="meter-count">0/8</span><span aria-hidden="true">▾</span></button>
   <div class="project-location"><label class="muted" for="project">Send to project / Pi session</label><select id="project" aria-label="Annotation destination"></select></div>
   <p id="notice" role="status">Capture → mark an app area → add a note → ✓ save here. Send only when ready.</p>
@@ -16,35 +16,33 @@
     <h2>Settings</h2>
     <div class="settings-groups">
       <fieldset><legend>Shortcut</legend>
-        <label for="capture-shortcut">Capture shortcut</label>
-        <input id="capture-shortcut" type="text" maxlength="128" spellcheck="false" autocomplete="off" aria-describedby="capture-shortcut-help">
-        <p id="capture-shortcut-help" class="muted">Click the field and press the key combination to use, e.g. ⌘/Ctrl+Shift+A. Backspace clears it to use the launch default shown in the field. The shortcut starts capture immediately.</p>
-        <label class="switch-row" for="global-shortcut"><span>Global shortcut (works from any app)</span><input id="global-shortcut" type="checkbox" role="switch" aria-describedby="global-shortcut-help"><span class="switch" aria-hidden="true"></span></label>
-        <p id="global-shortcut-help" class="muted">On: the shortcut starts annotation from anywhere in the operating system. Off: it only works while the Annotate Console is focused.</p>
+        <div class="field-head"><label for="capture-shortcut">Capture shortcut</label><span class="info" id="capture-shortcut-help" tabindex="0" role="button" aria-label="About this setting: Click the field and press the key combination. It is saved and applied immediately. Backspace restores the launch default shown in the field. The shortcut starts a capture with no countdown.">ⓘ<span class="tip" role="tooltip">Click the field and press the key combination. It is saved and applied immediately. Backspace restores the launch default shown in the field. The shortcut starts a capture with no countdown.</span></span></div>
+        <input id="capture-shortcut" type="text" maxlength="128" spellcheck="false" autocomplete="off" aria-describedby="capture-shortcut-help shortcut-status">
+        <p id="shortcut-status" class="field-status" role="status"></p>
+        <div class="switch-row"><div class="field-head"><label for="global-shortcut">Global shortcut</label><span class="info" id="global-shortcut-help" tabindex="0" role="button" aria-label="About this setting: On: the shortcut starts an annotation from any app. Off: it works only while the Annotate Console is focused. Applied immediately.">ⓘ<span class="tip" role="tooltip">On: the shortcut starts an annotation from any app. Off: it works only while the Annotate Console is focused. Applied immediately.</span></span></div><label class="switch-hit"><input id="global-shortcut" type="checkbox" role="switch" aria-describedby="global-shortcut-help"><span class="switch" aria-hidden="true"></span></label></div>
       </fieldset>
       <fieldset><legend>Capture</legend>
-        <label for="capture-countdown">Capture countdown (seconds)</label>
-        <input id="capture-countdown" type="number" min="0" max="30" step="1" value="1">
-        <p class="muted">Wait before Capture or Retake so you can reopen a menu. Set 0 for no delay. The keyboard shortcut always captures immediately.</p>
-        <label for="capture-mode">Capture mode (Hyprland / sway)</label>
+        <div class="field-head"><label for="mark-tool">Default mark tool</label><span class="info" id="mark-tool-help" tabindex="0" role="button" aria-label="About this setting: Tool used by Capture and the keyboard shortcut. You can still switch between Freehand and Area while marking.">ⓘ<span class="tip" role="tooltip">Tool used by Capture and the keyboard shortcut. You can still switch between Freehand and Area while marking.</span></span></div>
+        <select id="mark-tool" aria-describedby="mark-tool-help"><option value="freehand">✎ Freehand (default)</option><option value="rectangle">▭ Area</option></select>
+        <div class="field-head"><label for="mark-overflow">When a mark crosses the app edge</label><span class="info" id="mark-overflow-help" tabindex="0" role="button" aria-label="About this setting: What happens when a mark goes past the edge of the app. Trim: the mark is cut to the app window where you started drawing. Extend: the screenshot grows to include the whole app plus the part of the mark outside it.">ⓘ<span class="tip" role="tooltip">What happens when a mark goes past the edge of the app. Trim: the mark is cut to the app window where you started drawing. Extend: the screenshot grows to include the whole app plus the part of the mark outside it.</span></span></div>
+        <select id="mark-overflow" aria-describedby="mark-overflow-help"><option value="clip">Trim the mark to the app (default)</option><option value="extend">Extend the capture to include the mark</option></select>
+        <div class="field-head"><label for="capture-countdown">Capture countdown (seconds)</label><span class="info" id="capture-countdown-help" tabindex="0" role="button" aria-label="About this setting: Wait before Capture or Retake so you can reopen a menu. 0 means no delay. The keyboard shortcut always captures immediately.">ⓘ<span class="tip" role="tooltip">Wait before Capture or Retake so you can reopen a menu. 0 means no delay. The keyboard shortcut always captures immediately.</span></span></div>
+        <input id="capture-countdown" type="number" min="0" max="30" step="1" value="1" aria-describedby="capture-countdown-help">
+        <div class="field-head"><label for="capture-mode">Capture mode (Hyprland / sway)</label><span class="info" id="capture-mode-help" tabindex="0" role="button" aria-label="About this setting: Hyprland and sway only. Live marks the app without freezing it, then captures. Preserved freezes the desktop first so open menus stay visible. Other desktops always use live capture.">ⓘ<span class="tip" role="tooltip">Hyprland and sway only. Live marks the app without freezing it, then captures. Preserved freezes the desktop first so open menus stay visible. Other desktops always use live capture.</span></span></div>
         <select id="capture-mode" aria-describedby="capture-mode-help"><option value="live">Live marking (default)</option><option value="preserved">Preserved frame (keeps dropdowns)</option></select>
-        <p id="capture-mode-help" class="muted">Live marks the app without freezing, then captures it. Preserved freezes the desktop before marking to keep menus. Other desktops use their native live capture.</p>
       </fieldset>
       <fieldset><legend>Batch</legend>
-        <label for="max-annotations">Maximum annotations per batch</label>
-        <input id="max-annotations" type="number" min="1" max="12" step="1" value="8">
-        <p class="muted">Default: 8; range 1–12. The 24 MiB transport limit still applies. Existing drafts are never removed by settings.</p>
-        <label for="default-delivery">Default send as</label>
-        <select id="default-delivery"><option value="followUp">Follow-up</option><option value="steer">Queued (steering)</option></select>
+        <div class="field-head"><label for="max-annotations">Maximum annotations per batch</label><span class="info" id="max-annotations-help" tabindex="0" role="button" aria-label="About this setting: Default 8, range 1–12. The 24 MiB transport limit still applies. Existing annotations are never removed by this setting.">ⓘ<span class="tip" role="tooltip">Default 8, range 1–12. The 24 MiB transport limit still applies. Existing annotations are never removed by this setting.</span></span></div>
+        <input id="max-annotations" type="number" min="1" max="12" step="1" value="8" aria-describedby="max-annotations-help">
+        <div class="field-head"><label for="default-delivery">Default send as</label><span class="info" id="default-delivery-help" tabindex="0" role="button" aria-label="About this setting: Follow-up waits for the current Pi task to finish. Queued (steering) is read at the next tool boundary.">ⓘ<span class="tip" role="tooltip">Follow-up waits for the current Pi task to finish. Queued (steering) is read at the next tool boundary.</span></span></div>
+        <select id="default-delivery" aria-describedby="default-delivery-help"><option value="followUp">Follow-up</option><option value="steer">Queued (steering)</option></select>
       </fieldset>
       <fieldset><legend>Appearance</legend>
-        <label for="console-layout">Console design</label>
+        <div class="field-head"><label for="console-layout">Console design</label><span class="info" id="console-layout-help" tabindex="0" role="button" aria-label="About this setting: Timeline feed: a narrow panel that docks to a screen edge; double-click an annotation to open it and add numbered marks. Command pill: a compact floating bar that opens into a tray.">ⓘ<span class="tip" role="tooltip">Timeline feed: a narrow panel that docks to a screen edge; double-click an annotation to open it and add numbered marks. Command pill: a compact floating bar that opens into a tray.</span></span></div>
         <select id="console-layout" aria-describedby="console-layout-help"><option value="timeline">Timeline feed (default)</option><option value="pill">Command pill</option></select>
-        <p id="console-layout-help" class="muted">Timeline feed is a narrow panel that docks to a screen edge; double-click an annotation to open it beside the panel. Command pill is a compact floating bar that opens into a tray.</p>
       </fieldset>
     </div>
-    <p id="settings-status" role="status"></p>
-    <div class="settings-actions"><button id="cancel-settings">Cancel</button><button id="save-settings" class="primary">Save settings</button></div>
+    <div class="settings-actions"><p id="settings-status" role="status"></p><button id="cancel-settings">Cancel</button><button id="save-settings" class="primary">Save settings</button></div>
     <footer class="developer-credit"><span>Developed by Chris Visser</span><a id="developer-link" href="https://github.com/vcsoc">github.com/vcsoc</a></footer>
   </div>
   <div id="console-body">

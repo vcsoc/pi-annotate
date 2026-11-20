@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0
+
+- The capture shortcut and the Global switch are saved and applied as soon as you set them. A confirmation (or an error) appears directly under the field. Previously the recorded keys were only kept after **Save settings**, so leaving Settings any other way lost them.
+- New **Default mark tool** setting, Freehand by default. Capture and the keyboard shortcut start with it.
+- New **When a mark crosses the app edge** setting. **Trim** (default) cuts the mark to the app window where you started drawing. **Extend** widens the screenshot to include the whole app plus the overflowing part of the mark. Previously, crossing the edge cancelled the capture.
+- Settings help text moved into ⓘ tooltips next to each setting. Errors from Save show beside the Save button.
+
 ## 0.7.0
 
 - **Numbered marks:** open an annotation (double-click, or ＋ Mark) and draw more Area/Freehand marks on its screenshot. Each mark gets a number badge in the image and its own comment. Pi receives the marks as a numbered list, with coordinates for each. Send waits until every mark has a comment.

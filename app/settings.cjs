@@ -1,7 +1,7 @@
 const { readFileSync, writeFileSync, mkdirSync, openSync, fsyncSync, closeSync, renameSync, rmSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { randomUUID } = require('node:crypto');
-const DEFAULTS = Object.freeze({ countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp', captureShortcut: '', globalShortcut: true, consoleLayout: 'timeline' });
+const DEFAULTS = Object.freeze({ countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp', captureShortcut: '', globalShortcut: true, consoleLayout: 'timeline', markTool: 'freehand', markOverflow: 'clip' });
 function validateShortcut(value) {
   if (typeof value === 'string' && value.length <= 128) {
     if (!value.trim()) return '';
@@ -22,7 +22,10 @@ function validateSettings(value) {
   if (typeof globalShortcut !== 'boolean') throw new Error('Global shortcut must be on or off.');
   const { consoleLayout = DEFAULTS.consoleLayout } = value;
   if (!['timeline', 'pill'].includes(consoleLayout)) throw new Error('Choose the Timeline feed or Command pill design.');
-  return { countdownSeconds: value.countdownSeconds, captureMode, maxAnnotations, defaultDeliverAs, captureShortcut: validateShortcut(value.captureShortcut === undefined ? DEFAULTS.captureShortcut : value.captureShortcut), globalShortcut, consoleLayout };
+  const { markTool = DEFAULTS.markTool, markOverflow = DEFAULTS.markOverflow } = value;
+  if (!['freehand', 'rectangle'].includes(markTool)) throw new Error('Choose Freehand or Area as the default mark tool.');
+  if (!['clip', 'extend'].includes(markOverflow)) throw new Error('Choose Trim or Extend for marks that cross the app edge.');
+  return { countdownSeconds: value.countdownSeconds, captureMode, maxAnnotations, defaultDeliverAs, captureShortcut: validateShortcut(value.captureShortcut === undefined ? DEFAULTS.captureShortcut : value.captureShortcut), globalShortcut, consoleLayout, markTool, markOverflow };
 }
 function loadSettings(file) {
   // Preserve preferences written by the earlier dedicated settings build.

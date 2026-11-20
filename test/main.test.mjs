@@ -144,7 +144,7 @@ test('Omarchy marks the live desktop before taking whole-app evidence, without a
   assert.doesNotMatch(branch, /snapshotDesktop|frame\.crop|selectOnDesktop\(kind,/);
   assert.ok(branch.indexOf('await selectRegion') < branch.indexOf("await exec('grim'"));
   assert.match(branch, /await selectOnDesktop\(kind\)/);
-  assert.match(branch, /geometry\(target\)/);
+  assert.match(branch, /geometry\(choice\.target\)/);
 });
 test('Console Capture uses the one-second default and configurable countdown', async () => {
   const c = controller(); c.context.requests = [];
@@ -209,7 +209,7 @@ test('combined settings persist atomically, enforce limits, retain drafts and pr
   assert.equal((await c.invoke('state')).settings.maxAnnotations, 8);
   await assert.rejects(c.invoke('settings', [{ countdownSeconds: 0 }]), /Only the Console/);
   await c.invoke('settings', [{ countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer' }], c.consoleWindow);
-  assert.deepEqual(saved, { countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer', captureShortcut: '', globalShortcut: true, consoleLayout: 'timeline' });
+  assert.deepEqual(saved, { countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer', captureShortcut: '', globalShortcut: true, consoleLayout: 'timeline', markTool: 'freehand', markOverflow: 'clip' });
   const items = [0, 1].map(i => ({ id: 'old-' + i, image: png(), comment: 'Keep me' })); c.seed(undefined, items);
   await assert.rejects(c.invoke('settings', [{ maxAnnotations: 1 }], c.consoleWindow), /Finish the current capture/);
   await assert.rejects(c.invoke('add', [{ image: png(), comment: 'Over limit' }]), /Batch limit/);
@@ -323,7 +323,10 @@ test('popup saves numbered marks with their own comments; Send waits for every m
   assert.equal(sent.base, undefined); assert.equal(sent.marks[1].comment, 'Second'); assert.equal(sent.kind, 'rectangle');
 });
 test('mark tool choice is remembered for the shortcut and can be switched while marking', async () => {
-  const c = controller();
+  const c = controller({ saveSettings: (_file, next) => next });
+  assert.equal((await c.invoke('state')).captureKind, 'freehand');
+  await c.invoke('settings', [{ markTool: 'rectangle' }], c.consoleWindow);
+  assert.equal((await c.invoke('state')).captureKind, 'rectangle');
   await c.invoke('capture-kind', ['freehand'], c.consoleWindow);
   assert.equal((await c.invoke('state')).captureKind, 'freehand');
   await assert.rejects(c.invoke('capture-kind', ['circle'], c.consoleWindow), /Invalid mark tool/);

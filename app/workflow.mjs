@@ -5,6 +5,25 @@ export function applicationForRegion(region, windows) {
   if (!candidates.length) throw new Error('Draw the marked area inside one application window. The full app—not just the marked area—must be captured.');
   return candidates[0];
 }
+// A mark that crosses the app edge: pick the window where drawing started (else the
+// one it overlaps most). 'clip' keeps that window and trims the mark to it; 'extend'
+// widens the capture to the window plus the whole mark.
+export function targetForMark(region, windows, { overflow = 'clip', start } = {}) {
+  try { const app = applicationForRegion(region, windows); return { app, target: app, adjusted: false }; }
+  catch (error) { if (!['clip', 'extend'].includes(overflow)) throw error; }
+  const overlap = w => Math.max(0, Math.min(region.x + region.width, w.x + w.width) - Math.max(region.x, w.x)) * Math.max(0, Math.min(region.y + region.height, w.y + w.height) - Math.max(region.y, w.y));
+  const contains = (w, p) => p && p[0] >= w.x && p[0] <= w.x + w.width && p[1] >= w.y && p[1] <= w.y + w.height;
+  const touching = windows.filter(w => overlap(w) > 0);
+  if (!touching.length) throw new Error('Start the mark inside the application you want to annotate.');
+  const order = (a, b) => Number(Boolean(b.floating)) - Number(Boolean(a.floating)) || (a.focusOrder ?? 99999) - (b.focusOrder ?? 99999);
+  const started = touching.filter(w => contains(w, start)).sort(order);
+  const app = started[0] || [...touching].sort((a, b) => overlap(b) - overlap(a) || order(a, b))[0];
+  if (overflow === 'clip') return { app, target: app, adjusted: 'clipped' };
+  const x = Math.floor(Math.min(app.x, region.x)), y = Math.floor(Math.min(app.y, region.y));
+  const target = { ...app, x, y, width: Math.ceil(Math.max(app.x + app.width, region.x + region.width)) - x, height: Math.ceil(Math.max(app.y + app.height, region.y + region.height)) - y, extended: true };
+  return { app, target, adjusted: 'extended' };
+}
+export const clampPoints = points => points.map(point => point.map(n => Math.max(0, Math.min(1, n))));
 export function relativeMark(region, app) {
   const clamp = n => Math.max(0, Math.min(1, n));
   return [[clamp((region.x - app.x) / app.width), clamp((region.y - app.y) / app.height)], [clamp((region.x + region.width - app.x) / app.width), clamp((region.y + region.height - app.y) / app.height)]];

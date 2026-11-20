@@ -53,10 +53,22 @@
 #settings input{max-width:100px;padding:6px 8px;color:inherit;background:#262f43;border:1px solid #46536d;border-radius:6px}
 #settings #capture-shortcut{width:100%;max-width:none}
 #settings #capture-shortcut.recording{border-color:#ffd45e;outline:2px solid #ffd45e;outline-offset:1px;caret-color:transparent}
-#settings .settings-actions{display:flex;gap:8px;justify-content:flex-end;position:sticky;bottom:0;background:#161b26;padding:6px 0;margin-top:-4px}
+#settings .settings-actions{display:flex;gap:8px;justify-content:flex-end;align-items:center;position:sticky;bottom:0;background:#161b26;padding:6px 0;margin-top:-4px;z-index:6}
+#settings #settings-status{flex:1;min-width:0;font-size:11px;color:#ffd45e;max-height:44px;overflow:auto}
 #settings .developer-credit{display:flex;gap:6px;justify-content:space-between;padding:6px 0 2px;font-size:11px;background:none;min-height:0}
 #settings a{color:#90acf9}
-#settings .switch-row{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer}
+#settings .switch-row{display:flex;align-items:center;justify-content:space-between;gap:10px;position:relative}
+#settings .switch-hit{display:inline-flex;cursor:pointer}
+.field-head{display:flex;align-items:center;gap:6px;position:relative;min-width:0}
+.info{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;color:#90acf9;font-size:13px;line-height:1;cursor:help;outline:none}
+.info:hover,.info:focus-visible{color:#ffd45e}
+.info:focus-visible{box-shadow:0 0 0 2px #ffd45e}
+.info .tip{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:10;padding:8px 10px;border-radius:7px;background:#0d1220;border:1px solid #46536d;box-shadow:0 6px 18px #000a;color:#dfe6f5;font-size:11.5px;line-height:16px;font-weight:400;white-space:normal;cursor:default}
+.switch-row .info .tip{right:-60px}
+.info:hover .tip,.info:focus .tip{display:block}
+.field-status{min-height:0;font-size:11px;color:#8fe0b0}
+.field-status:empty{display:none}
+.field-status.error{color:#ffb4c2}
 #settings .switch-row input{position:absolute;opacity:0;width:1px;height:1px;margin:0;padding:0}
 .switch{position:relative;flex-shrink:0;width:38px;height:22px;border-radius:11px;background:#46536d;transition:background .15s}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#edf1fa;transition:transform .15s}
