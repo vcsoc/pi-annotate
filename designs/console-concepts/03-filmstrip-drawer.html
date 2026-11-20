@@ -8,7 +8,7 @@ body{font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#edf1fa;b
 figure{margin:0;display:flex;flex-direction:column;gap:8px}figcaption{font-size:12px;color:#aab5cc}
 .edge{position:relative;padding-right:6px;border-right:2px dashed #ffd45e66;align-self:flex-start}
 .win{width:340px;height:860px;background:#13161f;border-radius:12px;box-shadow:0 22px 50px #000a,0 0 0 1px #ffffff17;display:flex;flex-direction:column;overflow:hidden;position:relative}
-.handle{position:absolute;left:-1px;top:50%;transform:translateY(-50%);width:14px;height:64px;border-radius:0 7px 7px 0;background:#2a2f40;border:1px solid #ffd45e88;border-left:0;display:grid;place-items:center;color:#ffd45e;font-size:9px;writing-mode:vertical-rl}
+.handle{position:absolute;right:0;top:0;bottom:0;width:3px;background:linear-gradient(#ffd45e00,#ffd45e 20%,#ffd45e 80%,#ffd45e00)}
 header{display:flex;align-items:center;gap:6px;padding:10px 8px 10px 14px;cursor:grab}
 header strong{font-size:13px}.kbd{font-size:10.5px;border:1px solid #46536d;border-radius:5px;padding:1px 5px;color:#cfd8ee}
 .dk{font-size:10px;color:#1a1400;background:#ffd45e;border-radius:4px;padding:1px 5px;font-weight:600}
@@ -67,11 +67,11 @@ header strong{font-size:13px}.kbd{font-size:10.5px;border:1px solid #46536d;bord
 
 <div class="cap"><h1>03 · Filmstrip Drawer <span class="pill">Narrow vertical panel</span></h1>
 <p><b>Idea:</b> one annotation at a time gets the full panel width (big screenshot + note), while a 4-column filmstrip below shows the whole batch <i>and its capacity</i> — empty dashed slots make “3 of 8” visible at a glance. All primary actions sit in a thumb-friendly bottom dock. Settings split into three in-panel tabs (Shortcut · Capture · Batch), each fitting without scrolling.</p>
-<p><b>Size:</b> 340 × full work-area height (shown 860px), docked right; an edge handle shows the docked side. <b>Trade-offs:</b> only one note is readable at a time; 12-slot batches need a third filmstrip row.</p></div>
+<p><b>Size:</b> 340 × full work-area height (shown 860px), docked right; a gold edge glow + “Docked ▸” chip show the docked side. <b>Trade-offs:</b> only one note is readable at a time; 12-slot batches need a third filmstrip row.</p></div>
 
 <div class="stage">
 <figure><div class="edge"><div class="win">
- <span class="handle" title="Docked right — drag to undock">⋮⋮</span>
+ <span class="handle" title="Docked right — drag to undock"></span>
  <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="dk">Docked ▸</span><span class="sp"></span><button class="ib">⚙</button><button class="ib">×</button></header>
  <div class="to"><span class="k">To</span><span class="sel"><span>pi-annotate — console redesign</span><span>▾</span></span><span class="k">As</span><span><span class="seg"><span class="on">Follow-up</span><span>Queued (steering)</span></span></span></div>
  <div class="notice">Capture → mark an app area → add a note → ✓ save here. Send only when ready.</div>
@@ -86,7 +86,7 @@ header strong{font-size:13px}.kbd{font-size:10.5px;border:1px solid #46536d;bord
    <div class="slot e">4</div><div class="slot e">5</div><div class="slot e">6</div><div class="slot e">7</div><div class="slot e">8</div>
   </div></div>
  <div class="dockb">
-  <div class="cr"><button class="capb">＋ Capture <small>in 1s</small></button><div class="tool" title="Mark tool"><span class="on" title="Area">▭</span><span title="Freehand">✎</span></div></div>
+  <div class="cr"><button class="capb">＋ Capture (1s) <small>Area</small></button><div class="tool" title="Mark tool"><span class="on" title="Area">▭</span><span title="Freehand">✎</span></div></div>
   <div class="pw">⚠ Send shares the <b>entire application</b> screenshot of every annotation with the selected Pi session. Add a note to #3 first.</div>
   <div class="sr"><button class="dis">Discard all</button><button class="snd" disabled style="opacity:.5">➤ Send 3</button></div>
  </div>
@@ -110,7 +110,7 @@ header strong{font-size:13px}.kbd{font-size:10.5px;border:1px solid #46536d;bord
   <div><div class="fl">Capture mode <span class="chip">Hyprland / sway</span></div><div class="radio">
    <div class="on"><span class="rd"></span><span>Live marking (default)<small>Marks the app without freezing, then captures it.</small></span></div>
    <div><span class="rd"></span><span>Preserved frame<small>Freezes the desktop first to keep dropdowns open.</small></span></div></div></div>
-  <div style="border-top:1px solid #2a3040;padding-top:14px"><div class="fl">Batch tab preview: Maximum annotations</div><div class="num"><span>1</span><span>2</span><span>4</span><span>6</span><span class="on">8</span><span>10</span><span>12</span></div><p class="help">Range 1–12 (default 8). Default send as lives on the same tab.</p></div>
+  <div style="border-top:1px solid #2a3040;padding-top:14px"><div class="fl">Maximum annotations <span class="chip">from Batch tab</span></div><div class="num"><span>1</span><span>2</span><span>4</span><span>6</span><span class="on">8</span><span>10</span><span>12</span></div><p class="help">Range 1–12 (default 8). Default send as lives on the same tab.</p></div>
  </div>
  <div class="ft"><div class="fb"><button>Cancel</button><button class="pri">Save settings</button></div><div class="credit">Developed by Chris Visser · <a href="#">github.com/vcsoc</a></div></div>
 </div><figcaption>Settings · Capture tab — slider + radio cards</figcaption></figure>

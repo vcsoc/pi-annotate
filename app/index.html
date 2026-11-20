@@ -3,30 +3,46 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'">
 <title>Annotate Console</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<section id="toolbar" hidden>
-  <header class="drag console-title"><strong>✎ Annotate Console</strong><span id="shortcut" class="muted"></span><button id="toggle-settings" class="icon" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings">⚙</button><button id="close-console" class="icon" aria-label="Close Annotate Console">×</button></header>
-  <div class="console-actions"><button id="capture" class="primary">＋ Capture</button><select id="capture-kind" aria-label="Mark tool"><option value="rectangle">▭ Area</option><option value="freehand">✎ Freehand</option></select><button id="clear" class="action-icon" title="Discard all annotations" aria-label="Discard all annotations">🗑</button><button id="send" class="primary action-icon" title="Send all annotations" aria-label="Send all annotations" disabled><span aria-hidden="true">➤</span> <span id="send-count">0</span></button></div>
-  <div class="console-actions"><label for="delivery-mode">Send as</label><select id="delivery-mode" aria-label="Annotation delivery mode" title="Follow-up waits for the current task to finish. Queued (steering) is read at the next tool boundary."><option value="followUp">Follow-up</option><option value="steer">Queued (steering)</option></select></div>
+<section id="toolbar" class="layout-timeline" hidden>
+  <header class="drag console-title"><span class="grip" aria-hidden="true">⋮⋮</span><strong class="console-name">✎ <span>Annotate Console</span></strong><span id="shortcut" class="badge"></span><button id="toggle-settings" class="icon" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings">⚙</button><button id="close-console" class="icon" aria-label="Close Annotate Console">×</button></header>
+  <div class="capture-split"><button id="capture" class="primary">＋ Capture</button><select id="capture-kind" aria-label="Mark tool"><option value="rectangle">▭ Area</option><option value="freehand">✎ Freehand</option></select></div>
+  <button id="tray-toggle" class="meter" aria-expanded="false" aria-controls="console-body" title="Show annotations"><span id="meter-dots" aria-hidden="true"></span><span id="meter-count">0/8</span><span aria-hidden="true">▾</span></button>
   <div class="project-location"><label class="muted" for="project">Send to project / Pi session</label><select id="project" aria-label="Annotation destination"></select></div>
   <p id="notice" role="status">Capture → mark an app area → add a note → ✓ save here. Send only when ready.</p>
+  <div class="delivery"><label for="delivery-mode">Send as</label><select id="delivery-mode" aria-label="Annotation delivery mode" title="Follow-up waits for the current task to finish. Queued (steering) is read at the next tool boundary."><option value="followUp">Follow-up</option><option value="steer">Queued (steering)</option></select></div>
+  <button id="clear" class="action-icon" title="Discard all annotations" aria-label="Discard all annotations">🗑</button>
+  <button id="send" class="primary action-icon" title="Send all annotations" aria-label="Send all annotations" disabled><span aria-hidden="true">➤</span> <span id="send-count">0</span></button>
   <div id="settings" hidden>
     <h2>Settings</h2>
-    <label for="capture-shortcut">Capture shortcut</label>
-    <input id="capture-shortcut" type="text" maxlength="128" spellcheck="false" autocomplete="off" aria-describedby="capture-shortcut-help">
-    <p id="capture-shortcut-help" class="muted">Click the field and press the key combination to use, e.g. ⌘/Ctrl+Shift+A. Backspace clears it to use the launch default shown in the field. The shortcut starts capture immediately.</p>
-    <label class="switch-row" for="global-shortcut"><span>Global shortcut (works from any app)</span><input id="global-shortcut" type="checkbox" role="switch" aria-describedby="global-shortcut-help"><span class="switch" aria-hidden="true"></span></label>
-    <p id="global-shortcut-help" class="muted">On: the shortcut starts annotation from anywhere in the operating system. Off: it only works while the Annotate Console is focused.</p>
-    <label for="capture-countdown">Capture countdown (seconds)</label>
-    <input id="capture-countdown" type="number" min="0" max="30" step="1" value="1">
-    <p class="muted">Wait before Capture or Retake so you can reopen a menu. Set 0 for no delay. The keyboard shortcut always captures immediately.</p>
-    <label for="capture-mode">Capture mode (Hyprland / sway)</label>
-    <select id="capture-mode" aria-describedby="capture-mode-help"><option value="live">Live marking (default)</option><option value="preserved">Preserved frame (keeps dropdowns)</option></select>
-    <p id="capture-mode-help" class="muted">Live marks the app without freezing, then captures it. Preserved freezes the desktop before marking to keep menus. Other desktops use their native live capture.</p>
-    <label for="max-annotations">Maximum annotations per batch</label>
-    <input id="max-annotations" type="number" min="1" max="12" step="1" value="8">
-    <p class="muted">Default: 8; range 1–12. The 24 MiB transport limit still applies. Existing drafts are never removed by settings.</p>
-    <label for="default-delivery">Default send as</label>
-    <select id="default-delivery"><option value="followUp">Follow-up</option><option value="steer">Queued (steering)</option></select>
+    <div class="settings-groups">
+      <fieldset><legend>Shortcut</legend>
+        <label for="capture-shortcut">Capture shortcut</label>
+        <input id="capture-shortcut" type="text" maxlength="128" spellcheck="false" autocomplete="off" aria-describedby="capture-shortcut-help">
+        <p id="capture-shortcut-help" class="muted">Click the field and press the key combination to use, e.g. ⌘/Ctrl+Shift+A. Backspace clears it to use the launch default shown in the field. The shortcut starts capture immediately.</p>
+        <label class="switch-row" for="global-shortcut"><span>Global shortcut (works from any app)</span><input id="global-shortcut" type="checkbox" role="switch" aria-describedby="global-shortcut-help"><span class="switch" aria-hidden="true"></span></label>
+        <p id="global-shortcut-help" class="muted">On: the shortcut starts annotation from anywhere in the operating system. Off: it only works while the Annotate Console is focused.</p>
+      </fieldset>
+      <fieldset><legend>Capture</legend>
+        <label for="capture-countdown">Capture countdown (seconds)</label>
+        <input id="capture-countdown" type="number" min="0" max="30" step="1" value="1">
+        <p class="muted">Wait before Capture or Retake so you can reopen a menu. Set 0 for no delay. The keyboard shortcut always captures immediately.</p>
+        <label for="capture-mode">Capture mode (Hyprland / sway)</label>
+        <select id="capture-mode" aria-describedby="capture-mode-help"><option value="live">Live marking (default)</option><option value="preserved">Preserved frame (keeps dropdowns)</option></select>
+        <p id="capture-mode-help" class="muted">Live marks the app without freezing, then captures it. Preserved freezes the desktop before marking to keep menus. Other desktops use their native live capture.</p>
+      </fieldset>
+      <fieldset><legend>Batch</legend>
+        <label for="max-annotations">Maximum annotations per batch</label>
+        <input id="max-annotations" type="number" min="1" max="12" step="1" value="8">
+        <p class="muted">Default: 8; range 1–12. The 24 MiB transport limit still applies. Existing drafts are never removed by settings.</p>
+        <label for="default-delivery">Default send as</label>
+        <select id="default-delivery"><option value="followUp">Follow-up</option><option value="steer">Queued (steering)</option></select>
+      </fieldset>
+      <fieldset><legend>Appearance</legend>
+        <label for="console-layout">Console design</label>
+        <select id="console-layout" aria-describedby="console-layout-help"><option value="timeline">Timeline feed (default)</option><option value="pill">Command pill</option></select>
+        <p id="console-layout-help" class="muted">Timeline feed is a narrow panel that docks to a screen edge; double-click an annotation to open it beside the panel. Command pill is a compact floating bar that opens into a tray.</p>
+      </fieldset>
+    </div>
     <p id="settings-status" role="status"></p>
     <div class="settings-actions"><button id="cancel-settings">Cancel</button><button id="save-settings" class="primary">Save settings</button></div>
     <footer class="developer-credit"><span>Developed by Chris Visser</span><a id="developer-link" href="https://github.com/vcsoc">github.com/vcsoc</a></footer>
@@ -34,9 +50,16 @@
   <div id="console-body">
     <nav id="drafts" aria-label="Saved annotations"></nav>
     <div id="empty"><strong>No annotations yet</strong><p>Click Capture and mark an area in an app.</p><p>Each entry keeps the <b>whole app with your mark</b>, plus your note.</p></div>
-    <div id="detail" hidden><img id="entry-image" alt="Complete application screenshot with the marked area highlighted"><textarea id="entry-comment" rows="4" maxlength="8000" aria-label="Selected annotation text" placeholder="Annotation text"></textarea><span id="entry-count" class="muted"></span></div>
+    <div id="detail" hidden><img id="entry-image" alt="Complete application screenshot with the marked area highlighted" title="Double-click to open beside the Console"><textarea id="entry-comment" rows="3" maxlength="8000" aria-label="Selected annotation text" placeholder="Annotation text"></textarea><div class="detail-actions"><button id="entry-retake" title="Retake and replace this annotation">↻ Retake</button><button id="entry-reuse" title="Capture a new annotation using this note">⊕ Reuse</button><button id="entry-marks" title="Open the annotation to add numbered marks">＋ Mark</button><button id="entry-remove" class="danger" title="Delete this annotation">Remove</button><span id="entry-count" class="muted"></span></div></div>
   </div>
   <footer id="privacy-warning">⚠ Send shares all annotations with the selected Pi session. Each image includes the <strong>entire application</strong> with your area highlighted. Review the full screenshots for sensitive information first.</footer>
+</section>
+<section id="popup" hidden>
+  <header class="drag popup-head"><button id="detail-prev" class="nav" aria-label="Previous annotation">‹</button><strong id="detail-title">Annotation</strong><span id="detail-meta" class="muted ellipsis"></span><button id="detail-next" class="nav" aria-label="Next annotation">›</button><button id="detail-close" class="nav" aria-label="Close annotation detail">×</button></header>
+  <div class="popup-tools"><span class="muted">Add a mark:</span><button id="mark-rectangle" aria-pressed="true">▭ Area</button><button id="mark-freehand" aria-pressed="false">✎ Freehand</button><span id="mark-hint" class="muted ellipsis">Draw on the screenshot to add mark 2.</span></div>
+  <div id="popup-stage" class="popup-image"><canvas id="detail-canvas" aria-label="Complete application screenshot. Draw to add another numbered mark."></canvas></div>
+  <ol id="mark-list" aria-label="Numbered marks and their comments"></ol>
+  <div class="popup-actions"><button id="detail-retake">↻ Retake</button><button id="detail-reuse">⊕ Capture with this note</button><button id="detail-remove" class="danger">Remove</button><span id="detail-status" class="muted ellipsis" role="status"></span><button id="detail-done" class="primary">Done</button></div>
 </section>
 <section id="overlay" hidden>
   <header class="drag capture-header"><strong id="editor-title">Mark an area in this application</strong><div class="tools"><button id="rectangle" aria-pressed="true">▭ Area</button><button id="freehand" aria-pressed="false">✎ Freehand</button><button id="zoom-out" aria-label="Zoom out">−</button><button id="zoom-fit">Fit</button><button id="zoom-in" aria-label="Zoom in">+</button><button id="reset">Redraw</button><button id="back">Cancel</button></div></header>
@@ -45,7 +68,7 @@
 </section>
 <section id="note" hidden></section>
 <section id="mark" hidden><canvas id="mark-canvas"></canvas></section>
-<section id="desktop" hidden><canvas id="desktop-canvas"></canvas><div id="desktop-hint">Mark an area in an application · Esc to cancel<span id="desktop-status"></span></div></section>
+<section id="desktop" hidden><canvas id="desktop-canvas"></canvas><div id="desktop-hint">Mark an area in an application · Esc to cancel<span class="kind-toggle" role="group" aria-label="Mark tool"><button id="desktop-rectangle" aria-pressed="true">▭ Area</button><button id="desktop-freehand" aria-pressed="false">✎ Freehand</button></span><span id="desktop-status"></span></div></section>
 <template id="note-template"><div class="note-form"><header class="drag"><strong id="note-title">Note for marked area</strong><button id="cancel-note" class="icon" aria-label="Cancel annotation">×</button></header><div id="note-source" class="muted ellipsis"></div><textarea id="note-comment" rows="5" maxlength="8000" placeholder="What should change in this area?" aria-label="Annotation text"></textarea><div class="note-actions"><span id="note-status" role="status">Full app + highlighted area saved together.</span><button id="save-note" class="primary tick" aria-label="Save annotation" title="Save annotation (Ctrl/⌘+Enter)" disabled>✓</button></div></div></template>
 <section id="sources" hidden><header class="drag"><strong>Choose the application to annotate</strong><button id="source-cancel">Cancel</button></header><p class="muted">Choose an app from any monitor. Display fallback requires you to outline the whole app first, then mark the area within it.</p><div id="source-list"></div><p id="sources-status" role="status"></p></section>
 <section id="portal" hidden><header class="drag"><strong>Choose an application</strong></header><p>Choose the app window in your system picker. If your desktop only shares a display, identify the whole app before marking an area. No audio is captured.</p><button id="choose" class="primary">Choose app…</button><button id="portal-cancel">Cancel</button><p id="portal-status" role="status"></p></section>

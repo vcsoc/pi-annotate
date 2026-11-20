@@ -1,4 +1,4 @@
-# Pi Annotate — v0.6.0
+# Pi Annotate — v0.7.0
 
 A floating Console for collecting application screenshots, highlighted areas and notes, then sending the complete batch to your selected active Pi project/session.
 
@@ -48,7 +48,10 @@ Use the top-right **⚙** button to open Settings:
 
 - **Capture mode:** **Live marking** (default) or **Preserved frame**, for Hyprland/sway. The preference applies to Capture, Retake and the shortcut. Other desktops keep native post-selection capture; the preserved-mode selector is disabled there without erasing its saved preference.
 - **Capture shortcut:** click the field and press the combination you want (for example ⌘/Ctrl+Shift+A); the field records the keys you press instead of accepting typed text. While it is focused, the current shortcut is paused so you can re-record it. Press Backspace to clear it and restore the launch default, then click **Save settings**. The new shortcut takes effect immediately, without restarting Pi, and skips the countdown. If the OS or compositor rejects it, the previous shortcut stays active and the settings panel shows the error.
-- **Edge docking:** drop the Console within 32px of a screen's left or right edge and it docks there as a full-height side panel, 6px from the screen edges. Drag it away to undock; the height it had before docking is restored unless you resized it while docked. This works on macOS, Windows and X11. On Hyprland and sway, Electron gets no drag events, so use the compositor's own snapping.
+- **Console design** (Settings → Appearance): **Timeline feed** (default) is a narrow panel, 320px wide and about 60% of the screen height, that lists annotations as a timeline. Double-click an annotation's thumbnail or screenshot to open it in a popup beside the panel, level with that entry. **Command pill** is a compact floating bar (Capture, batch meter, shortcut, Send) that opens into a tray of annotation cards.
+- **Numbered marks:** double-click an annotation (or use **＋ Mark**) to open it, then draw more **Area** or **Freehand** marks on the screenshot. Each mark is numbered in the image and has its own comment; Pi receives them as a numbered list. Send stays disabled until every mark has a comment.
+- **Freehand on the live app:** while marking on screen, switch between **Area** and **Freehand** in the hint bar at the top (or press A/F where the overlay can take focus). The keyboard shortcut reuses the last tool.
+- **Edge docking** (timeline only): drop the Console within 32px of a screen's left or right edge and it docks there, 6px from the edge, at about 60% of the screen height. Drag it away to undock; the height it had before docking is restored unless you resized it while docked. This works on macOS, Windows and X11. On Hyprland and sway, Electron gets no drag events, so use the compositor's own snapping.
 - **Global shortcut** (switch, on by default): on registers the shortcut with the OS/compositor so annotation starts from any app. Off releases the OS binding; the shortcut then works only while the Annotate Console window is focused.
 - **Capture countdown:** **1 second** by default, range **0–30 seconds**, for Capture and Retake buttons. The shortcut remains immediate in either mode.
 - **Maximum annotations:** default **8**, range **1–12**. Capture/Add/Send enforce it; retaking an existing entry remains allowed at capacity. Lowering below your current draft count is refused without discarding anything. The separate 12-item / 24-MiB transport ceilings remain.

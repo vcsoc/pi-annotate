@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>07 · Tabbed Console — Annotate Console concept</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0}
+body{font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#edf1fa;background:radial-gradient(1000px 640px at 30% 0%,#30405f 0%,#1a2131 55%,#121620 100%);min-height:100vh;padding:28px 32px 40px}
+.cap{max-width:1300px;margin:0 0 22px}.cap h1{font-size:20px;margin:0 0 6px}.cap p{margin:4px 0;color:#b8c3da}
+.stage{display:flex;gap:36px;align-items:flex-start}
+figure{margin:0;display:flex;flex-direction:column;gap:8px}figcaption{font-size:12px;color:#aab5cc}
+.win{width:420px;height:600px;background:#161b26;border-radius:10px;box-shadow:0 22px 50px #000a,0 0 0 1px #ffffff17;display:flex;flex-direction:column;overflow:hidden}
+header{height:36px;display:flex;align-items:center;gap:6px;padding:0 6px 0 12px;cursor:grab;flex-shrink:0}
+header strong{font-size:13px}.kbd{font-size:10.5px;border:1px solid #46536d;border-radius:5px;padding:1px 5px;color:#cfd8ee}
+.sp{flex:1}.ib{background:none;border:0;color:#cfd8ee;font-size:15px;width:26px;height:26px;border-radius:6px}
+.tabs{display:flex;padding:0 10px;border-bottom:1px solid #2a3347;gap:2px;flex-shrink:0}
+.tabs span{padding:8px 12px;font-size:12.5px;color:#aab5cc;border-bottom:2px solid transparent;display:flex;gap:6px;align-items:center}
+.tabs span.on{color:#fff;border-color:#7a99f7}
+.tabs i{font-style:normal;font-size:10px;background:#263e70;border-radius:8px;padding:0 6px;color:#dfe7ff}
+.tabs .w{background:#5a4a1d;color:#ffe7a3}
+.body{flex:1;min-height:0;display:flex;flex-direction:column;padding:10px 12px;gap:8px}
+.ctl{display:flex;gap:6px;align-items:center}
+.btn{background:#262f43;border:1px solid #46536d;color:#edf1fa;border-radius:6px;padding:5px 9px;font:12px system-ui,sans-serif;white-space:nowrap}
+.pri{background:#3152af;border-color:#7a99f7;color:#fff;font-weight:600}
+.seg{display:flex;border:1px solid #46536d;border-radius:6px;overflow:hidden}.seg span{padding:5px 9px;font-size:12px;color:#aab5cc}.seg span.on{background:#263e70;color:#fff}
+.notice{font-size:11px;color:#bdcae2}
+.split{flex:1;min-height:0;display:grid;grid-template-columns:132px 1fr;gap:8px}
+.list{display:flex;flex-direction:column;gap:5px;overflow:hidden}
+.li{border:1px solid #344057;border-radius:7px;padding:4px;background:#1b2232;position:relative}
+.li svg{display:block;width:100%;height:auto;border-radius:4px;background:#090d15}
+.li span{display:block;font-size:10.5px;padding:3px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li.on{border-color:#90acf9;background:#263e70}
+.det{display:flex;flex-direction:column;gap:6px;min-height:0}
+.det svg.b{width:100%;height:auto;border-radius:6px;background:#090d15;display:block}
+textarea{flex:1;min-height:0;width:100%;resize:none;background:#10141d;border:2px solid #ffd45e;border-radius:7px;color:#edf1fa;padding:7px;font:12px/1.45 system-ui,sans-serif}
+.da{display:flex;gap:4px;align-items:center}.da .btn{font-size:11px;padding:3px 7px}.da .rm{color:#ffbdc9}.da small{margin-left:auto;color:#aab5cc;font-size:11px}
+.foot{border-top:1px solid #2a3347;padding:8px 12px 10px;display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:11px;color:#aab5cc}
+.mk{fill:#ff3b6526;stroke:#ff3b65;stroke-width:1.8}.fh{fill:none;stroke:#ff3b65;stroke-width:2.2;stroke-linecap:round}
+/* send tab */
+.sec{border:1px solid #344057;border-radius:9px;padding:10px 12px;background:#1b2232}
+.sec h4{margin:0 0 8px;font-size:11px;color:#aab5cc;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.dest{display:flex;flex-direction:column;gap:5px}
+.d{display:flex;gap:9px;align-items:center;padding:7px 9px;border:1px solid #2f3a51;border-radius:7px;font-size:12px}
+.d small{display:block;color:#8f9bb5;font-size:10.5px}.d.on{border-color:#90acf9;background:#1f3159}.d .st{margin-left:auto;font-size:10.5px;color:#8fd19e}.d .st.off{color:#ffbdc9}
+.rd{width:14px;height:14px;border-radius:50%;border:2px solid #7a99f7;flex-shrink:0}.on .rd{background:#7a99f7;box-shadow:inset 0 0 0 2px #1f3159}
+.mode{display:grid;grid-template-columns:1fr 1fr;gap:6px}.mode div{border:1px solid #2f3a51;border-radius:7px;padding:8px;font-size:12px}.mode div.on{border-color:#90acf9;background:#1f3159}.mode small{display:block;color:#aab5cc;font-size:10.5px;margin-top:2px}
+.warnbox{border:1px solid #6b5520;background:#2a2412;border-radius:9px;padding:9px 11px;font-size:11.5px;color:#f0d79c}
+.sum{display:flex;gap:4px}.sum svg{width:44px;height:28px;border-radius:3px;background:#090d15}
+.bigsend{background:#3152af;border:1px solid #7a99f7;color:#fff;border-radius:9px;padding:10px;font:600 13px system-ui,sans-serif;width:100%}
+/* settings tab */
+.st2{display:flex;gap:4px;padding:2px;background:#10141d;border:1px solid #344057;border-radius:8px}.st2 span{flex:1;text-align:center;font-size:11.5px;padding:5px;border-radius:6px;color:#aab5cc}.st2 span.on{background:#262f43;color:#fff}
+.row{display:grid;grid-template-columns:128px 1fr;gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid #232c3f}
+.row label{font-size:12px;padding-top:5px}
+.help{font-size:10.5px;color:#aab5cc;margin:4px 0 0}
+.rec{border:2px solid #ffd45e;border-radius:7px;padding:6px 9px;font-size:12px;color:#ffd45e;background:#10141d}
+.tg{width:38px;height:22px;border-radius:11px;background:#3152af;position:relative;display:inline-block;vertical-align:middle}.tg::after{content:"";position:absolute;top:3px;left:19px;width:16px;height:16px;border-radius:50%;background:#fff}
+.inp{display:inline-flex;align-items:center;gap:6px;font-size:12px}.inp b{border:1px solid #46536d;border-radius:6px;padding:4px 10px;background:#10141d;font-weight:400;min-width:48px;text-align:center}
+.credit{margin-top:auto;font-size:10.5px;color:#8f9bb5}.credit a{color:#90acf9;text-decoration:none}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="app" viewBox="0 0 160 100"><rect width="160" height="100" fill="#0e1320"/><rect width="160" height="9" fill="#232b3d"/><circle cx="5" cy="4.5" r="1.6" fill="#ff5f57"/><circle cx="10" cy="4.5" r="1.6" fill="#febc2e"/><circle cx="15" cy="4.5" r="1.6" fill="#28c840"/><rect y="9" width="34" height="91" fill="#171f30"/><rect x="5" y="15" width="22" height="3" rx="1" fill="#3a4766"/><rect x="5" y="22" width="18" height="3" rx="1" fill="#3a4766"/><rect x="5" y="29" width="24" height="3" rx="1" fill="#5d79c9"/><rect x="5" y="36" width="16" height="3" rx="1" fill="#3a4766"/><rect x="40" y="14" width="64" height="6" rx="1.5" fill="#cfd8ee"/><rect x="122" y="13" width="30" height="8" rx="2" fill="#3152af"/><rect x="40" y="26" width="112" height="30" rx="2" fill="#1f2a44"/><rect x="45" y="31" width="44" height="3" fill="#5a6c96"/><rect x="45" y="37" width="80" height="2" fill="#3a4766"/><rect x="45" y="42" width="70" height="2" fill="#3a4766"/><path d="M95 52 L105 44 L115 48 L128 36 L146 40" fill="none" stroke="#5ec29a" stroke-width="1.5"/><rect x="40" y="62" width="54" height="30" rx="2" fill="#1f2a44"/><rect x="98" y="62" width="54" height="30" rx="2" fill="#1f2a44"/><rect x="45" y="67" width="30" height="3" fill="#5a6c96"/><rect x="103" y="67" width="34" height="3" fill="#5a6c96"/></symbol></defs></svg>
+
+<div class="cap"><h1>07 · Tabbed Console</h1>
+<p><b>Idea:</b> the closest evolution of today’s window: same size, but three tabs — <b>Annotations</b> (capture + review), <b>Send</b> (destination, mode, privacy check, one big Send) and <b>Settings</b> (sub-tabs General / Capture / Batch). Each tab has room to breathe instead of stacking everything above the list.</p>
+<p><b>Size:</b> 420 × 600 (current default ≈ 400 × 600; min 320 × 360). <b>Trade-offs:</b> sending becomes a deliberate second step (good for the privacy check, one more click for power users — the footer button jumps straight to Send); destination is not visible while capturing, so the footer repeats it.</p></div>
+
+<div class="stage">
+<figure><div class="win">
+ <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="sp"></span><button class="ib" title="Settings">⚙</button><button class="ib" title="Close">×</button></header>
+ <div class="tabs"><span class="on">Annotations <i>3</i></span><span>Send</span><span>Settings</span></div>
+ <div class="body">
+  <div class="ctl"><button class="btn pri">＋ Capture (1s)</button><div class="seg" title="Mark tool"><span class="on">▭ Area</span><span>✎ Freehand</span></div><span class="sp"></span><button class="btn" style="color:#ffbdc9" title="Discard all annotations">Discard all</button></div>
+  <div class="notice">Capture → mark an app area → add a note → ✓ save here. Send only when ready.</div>
+  <div class="split">
+   <div class="list">
+    <div class="li"><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="40" y="60" width="56" height="34" rx="2"/></svg><span>1. Card padding differs…</span></div>
+    <div class="li on"><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="119" y="10" width="36" height="14" rx="2"/></svg><span>2. Primary button label…</span></div>
+    <div class="li"><svg viewBox="0 0 160 100"><use href="#app"/><path class="fh" d="M92 54 C96 40 120 30 140 34 C152 38 150 52 136 55 C120 58 100 60 92 54Z"/></svg><span>3. Chart line too thin…</span></div>
+   </div>
+   <div class="det">
+    <svg class="b" viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="119" y="10" width="36" height="14" rx="2"/></svg>
+    <textarea aria-label="Selected annotation text">Primary button label is clipped at narrow widths — shorten to “Save” or allow two lines.</textarea>
+    <div class="da"><button class="btn">↻ Retake</button><button class="btn" title="Capture a new annotation using this note">⊕ Reuse</button><button class="btn rm">Remove</button><small>3/8</small></div>
+   </div>
+  </div>
+ </div>
+ <div class="foot"><span>➤ pi-annotate · Follow-up</span><span class="sp"></span><button class="btn pri">Review &amp; send 3 →</button></div>
+</div><figcaption>Annotations tab</figcaption></figure>
+
+<figure><div class="win">
+ <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="sp"></span><button class="ib">⚙</button><button class="ib">×</button></header>
+ <div class="tabs"><span>Annotations <i>3</i></span><span class="on">Send</span><span>Settings</span></div>
+ <div class="body" style="gap:10px">
+  <div class="sec"><h4>Send to project / Pi session</h4><div class="dest">
+   <div class="d on"><span class="rd"></span><span>pi-annotate — console redesign<small>~/projects/vcsoc/pi-annotate</small></span><span class="st">● live</span></div>
+   <div class="d"><span class="rd"></span><span>pi-annotate — release notes [a41f2c]<small>~/projects/vcsoc/pi-annotate</small></span><span class="st">● live</span></div>
+   <div class="d"><span class="rd"></span><span>website<small>~/projects/vcsoc/website</small></span><span class="st off">offline</span></div>
+  </div></div>
+  <div class="sec"><h4>Send as</h4><div class="mode"><div class="on">Follow-up<small>Waits for the current task to finish.</small></div><div>Queued (steering)<small>Read at the next tool boundary.</small></div></div></div>
+  <div class="warnbox">⚠ Send shares all 3 annotations with the selected Pi session. Each image includes the <b>entire application</b> with your area highlighted. Review the full screenshots for sensitive information first.
+   <div class="sum" style="margin-top:8px"><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="40" y="60" width="56" height="34"/></svg><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="119" y="10" width="36" height="14"/></svg><svg viewBox="0 0 160 100"><use href="#app"/><path class="fh" d="M92 54 C96 40 120 30 140 34 C152 38 150 52 136 55 C120 58 100 60 92 54Z"/></svg></div></div>
+  <div class="sp"></div>
+  <button class="bigsend">➤ Send 3 annotations</button>
+ </div>
+</div><figcaption>Send tab — destination, mode and privacy in one place</figcaption></figure>
+
+<figure><div class="win">
+ <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="sp"></span><button class="ib" style="background:#263e70">⚙</button><button class="ib">×</button></header>
+ <div class="tabs"><span>Annotations <i>3</i></span><span>Send</span><span class="on">Settings <i class="w">unsaved</i></span></div>
+ <div class="body">
+  <div class="st2"><span class="on">General</span><span>Capture</span><span>Batch</span></div>
+  <div class="row"><label>Capture shortcut</label><div><div class="rec">Press the new shortcut…</div><p class="help">Click and press keys, e.g. ⌘/Ctrl+Shift+A. Backspace = launch default. Starts capture immediately.</p></div></div>
+  <div class="row"><label>Global shortcut</label><div><span class="tg" role="switch" aria-checked="true"></span> <span style="font-size:12px;margin-left:6px">Works from any app</span><p class="help">Off: only while the Annotate Console is focused.</p></div></div>
+  <div class="row"><label>Default send as</label><div><div class="seg" style="display:inline-flex"><span class="on">Follow-up</span><span>Queued (steering)</span></div><p class="help">Capture sub-tab: countdown (0–30s) and capture mode. Batch sub-tab: maximum annotations (1–12).</p></div></div>
+  <div class="credit">Developed by Chris Visser · <a href="#">github.com/vcsoc</a></div>
+ </div>
+ <div class="foot"><span>Changes apply after saving</span><span class="sp"></span><button class="btn">Cancel</button><button class="btn pri">Save settings</button></div>
+</div><figcaption>Settings tab — sub-tabs keep each group short</figcaption></figure>
+</div>
+</body></html>

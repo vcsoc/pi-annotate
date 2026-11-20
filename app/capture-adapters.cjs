@@ -58,7 +58,7 @@ function selectRegion(boxes, { signal, timeout = 120000 } = {}) {
   });
 }
 function nativeChoices(sources) {
-  return sources.filter(s => !/^(?:Pi Annotate\b|Annotate (?:Console|Note|Highlight|Capture|Sources)\b)/.test(s.name)).map(source => ({ id: source.id, name: cleanLabel(source.name), type: source.id.startsWith('window:') ? 'window' : 'screen', displayId: source.display_id, preview: source.thumbnail.toDataURL() }));
+  return sources.filter(s => !/^(?:Pi Annotate\b|Annotate (?:Console|Note|Highlight|Capture|Sources|Detail)\b)/.test(s.name)).map(source => ({ id: source.id, name: cleanLabel(source.name), type: source.id.startsWith('window:') ? 'window' : 'screen', displayId: source.display_id, preview: source.thumbnail.toDataURL() }));
 }
 async function workAreas(backend) {
   if (backend === 'hyprland') {

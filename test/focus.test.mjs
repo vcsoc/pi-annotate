@@ -20,7 +20,7 @@ function open(page, platform = 'darwin') {
   }
   runInNewContext(factory + `\nwindowFor('${page}', 'Test', {width:800,height:600});`, {
     BrowserWindow, process: { platform }, backend: null, desktopBackdrop: undefined, windows: new Set(), join: (...args) => args.join('/'), __dirname: '/test',
-    initialConsoleBounds: { width: 400, height: 600 }, busy: () => false, consoleAreas() {}, ownedWindowBounds() {}, enforceFloating() {}, saveBounds() {}, consolePlacement: () => ({ show: () => calls.push('console') }),
+    initialConsoleBounds: { width: 400, height: 600 }, settings: { consoleLayout: 'timeline' }, TIMELINE_HEIGHT_RATIO: 0.6, consoleLimits: () => ({ min: { width: 280, height: 360 } }), boundsFile: () => '/test', busy: () => false, consoleAreas() {}, ownedWindowBounds() {}, enforceFloating() {}, saveBounds() {}, consolePlacement: () => ({ show: () => calls.push('console') }),
   });
   ready(); return { options, calls, levels, workspaces, focused };
 }
@@ -36,7 +36,7 @@ test('note input can still focus; other platform selectors retain their behavior
   assert.deepEqual(open('desktop', 'win32').calls, ['show', 'focus']);
 });
 test('macOS Console, note and highlight panels join fullscreen Spaces and keep their level on focus', () => {
-  for (const page of ['toolbar', 'note', 'mark', 'desktop']) {
+  for (const page of ['toolbar', 'note', 'mark', 'desktop', 'popup']) {
     const f = open(page);
     assert.equal(f.options.type, 'panel');
     assert.equal(f.workspaces[0][0], true); assert.equal(f.workspaces[0][1].visibleOnFullScreen, true);

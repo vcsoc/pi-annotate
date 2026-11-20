@@ -24,11 +24,27 @@ test('global icon actions have tooltips and preserve the send count', () => {
   assert.match(js, /\$\('send-count'\)\.textContent = String\(state\.drafts\.length\)/);
   assert.doesNotMatch(js, /\$\('send'\)\.textContent/);
 });
-test('retake and remove controls belong to each draft, not bottom detail panel', () => {
+test('retake, reuse and remove act on the selected annotation shown in both designs', () => {
   assert.doesNotMatch(html, /id="(?:retake|retake-new|remove)"/);
+  for (const id of ['entry-retake', 'entry-reuse', 'entry-remove']) assert.match(html, new RegExp(`id="${id}"[^>]*title=`));
   assert.match(js, /replaceId: item\.id/);
   assert.match(js, /copyId: item\.id/);
   assert.match(js, /api\.remove\(item\.id\)/);
-  assert.match(js, /row\.append\(button, controls\)/);
-  assert.match(js, /control\.setAttribute\('aria-label', label\)/);
+});
+test('double-click opens the annotation popup level with its entry; popup edits numbered marks', () => {
+  assert.match(js, /addEventListener\('dblclick'/);
+  assert.match(js, /api\.detailOpen\(id, Math\.round\(\(row \|\| event\.target\)\.getBoundingClientRect\(\)\.top\)\)/);
+  for (const id of ['detail-prev', 'detail-next', 'detail-close', 'detail-canvas', 'mark-list', 'mark-rectangle', 'mark-freehand', 'detail-retake', 'detail-reuse', 'detail-remove', 'detail-done', 'entry-marks']) assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(js, /drawMarks\(c, marks/);
+  assert.match(js, /api\.detailSave\(target, payload\)/);
+});
+test('live marking overlay can switch between Area and Freehand', () => {
+  assert.match(html, /id="desktop-rectangle"/); assert.match(html, /id="desktop-freehand"/);
+  assert.match(js, /api\.desktopKind\(tool\)/); assert.match(js, /api\.onDesktopKind\(showKind\)/);
+});
+test('both Console designs are styled: timeline feed panel and command pill bar with tray', () => {
+  assert.match(html, /<section id="toolbar" class="layout-timeline"/);
+  assert.match(css, /\.layout-timeline\{[^}]*grid-template-areas/);
+  assert.match(css, /\.layout-pill\{[^}]*grid-template-areas/);
+  assert.match(css, /\.layout-pill\.tray-open\{/);
 });

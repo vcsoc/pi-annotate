@@ -30,3 +30,23 @@ export function drawMark(ctx, kind, points, width, height) {
   }
   ctx.fill(); ctx.stroke(); ctx.restore();
 }
+// Numbered badge just outside the mark's top-left corner (inside the image).
+export function badgePosition(points, width, height) {
+  const b = selectionBounds(points), radius = Math.max(11, Math.round(width / 90));
+  return { x: Math.min(width - radius - 2, Math.max(radius + 2, b.left * width - radius * 0.4)), y: Math.min(height - radius - 2, Math.max(radius + 2, b.top * height - radius * 0.4)), radius };
+}
+export function drawBadge(ctx, number, points, width, height) {
+  const { x, y, radius } = badgePosition(points, width, height);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = '#ff3b65'; ctx.shadowColor = '#000a'; ctx.shadowBlur = 4; ctx.fill();
+  ctx.shadowBlur = 0; ctx.lineWidth = Math.max(2, radius / 6); ctx.strokeStyle = '#ffffff'; ctx.stroke();
+  ctx.fillStyle = '#ffffff'; ctx.font = `bold ${Math.round(radius * 1.15)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(number), x, y + radius * 0.05);
+  ctx.restore();
+}
+// All marks of an annotation. Numbers are drawn only when there is more than one mark.
+export function drawMarks(ctx, marks, width, height) {
+  for (const mark of marks) drawMark(ctx, mark.kind, mark.points, width, height);
+  if (marks.length > 1) marks.forEach((mark, index) => drawBadge(ctx, index + 1, mark.points, width, height));
+}

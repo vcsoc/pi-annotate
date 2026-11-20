@@ -9,14 +9,14 @@ const start = source.indexOf("if (page === 'toolbar') {");
 const end = source.indexOf('// Both the adjacent', start);
 async function renderer() {
   const nodes = new Map(), handlers = new Map(), keyboard = new Map(), sent = [];
-  let onChange, saves = 0, failure; const recordings = [], shortcutCaptures = [];
+  let onChange, saves = 0, failure; const recordings = [], shortcutCaptures = [], sizes = [];
   const state = { project: '/test', settings: { countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp', captureShortcut: '', globalShortcut: true }, defaultShortcut: 'CommandOrControl+Shift+A', preservedCaptureAvailable: true, drafts: [], shortcut: 'Cmd+A', shortcutReady: true, shortcutGlobal: true, sending: false, capturing: false, backend: 'hyprland', destinations: [{ id: 'test', project: '/test' }], destinationId: 'test', destinationAvailable: true };
-  function element() { return { value: '', hidden: false, disabled: false, dataset: {}, children: [], attributes: {}, textContent: '', title: '', classList: { toggle() {} }, append(...items) { this.children.push(...items); }, replaceChildren(...items) { this.children = items; }, setAttribute(k, v) { this.attributes[k] = v; }, addEventListener(type, fn) { (this.listeners ||= {})[type] = fn; }, focus() { this.focused = true; }, reportValidity: () => true }; }
+  function element() { const node = { value: '', hidden: false, disabled: false, dataset: {}, children: [], attributes: {}, textContent: '', title: '', classList: { toggle(name, on) { (this.owner.classes ||= {})[name] = on; } }, append(...items) { this.children.push(...items); }, replaceChildren(...items) { this.children = items; }, setAttribute(k, v) { this.attributes[k] = v; }, addEventListener(type, fn) { (this.listeners ||= {})[type] = fn; }, focus() { this.focused = true; }, reportValidity: () => true }; node.classList.owner = node; return node; }
   const $ = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
   $('settings').hidden = true;
-  const api = { state: async () => structuredClone(state), onChange: fn => { onChange = fn; }, onNotice() {}, async settings(next) { saves++; if (failure) throw new Error(failure); state.settings = { ...next }; state.shortcut = next.captureShortcut || state.defaultShortcut; }, select: async () => {}, target: async () => {}, send: async (...args) => sent.push(args), shortcutRecording: async active => { recordings.push(active); }, shortcutCapture: async () => { shortcutCaptures.push(true); } };
+  const api = { state: async () => structuredClone(state), onChange: fn => { onChange = fn; }, onNotice() {}, async settings(next) { saves++; if (failure) throw new Error(failure); state.settings = { ...next }; state.shortcut = next.captureShortcut || state.defaultShortcut; }, select: async () => {}, target: async () => {}, send: async (...args) => sent.push(args), consoleSize: async mode => { sizes.push(mode); }, shortcutRecording: async active => { recordings.push(active); }, shortcutCapture: async () => { shortcutCaptures.push(true); } };
   await vm.runInNewContext('(async()=>{' + source.slice(start, end) + '})()', { page: 'toolbar', api, $, document: { createElement: element }, window: { addEventListener: (key, fn) => keyboard.set(key, fn) }, navigator: { platform: 'Mac' }, projectLabel: path => path, recordShortcut, matchesShortcut, action: (id, fn) => handlers.set(id, fn), report: error => { throw error; } });
-  return { $, state, handlers, sent, keyboard, recordings, shortcutCaptures, get saves() { return saves; }, fail: text => { failure = text; }, async refresh() { onChange(); await new Promise(resolve => setImmediate(resolve)); } };
+  return { $, state, handlers, sent, keyboard, recordings, shortcutCaptures, sizes, get saves() { return saves; }, fail: text => { failure = text; }, async refresh() { onChange(); await new Promise(resolve => setImmediate(resolve)); } };
 }
 test('settings combine live/preserved, countdown, limits and delivery default with draft-safe Cancel/Save', async () => {
   const r = await renderer();
@@ -33,8 +33,8 @@ test('settings combine live/preserved, countdown, limits and delivery default wi
   r.$('capture-countdown').value = 4; r.$('capture-mode').value = 'preserved'; r.$('max-annotations').value = 4; r.$('default-delivery').value = 'steer';
   await r.handlers.get('save-settings')();
   assert.equal(r.saves, 1);
-  assert.deepEqual(r.state.settings, { countdownSeconds: 4, captureMode: 'preserved', maxAnnotations: 4, defaultDeliverAs: 'steer', captureShortcut: 'Control+Alt+F9', globalShortcut: true });
-  assert.equal(r.$('shortcut').textContent, 'Control+Alt+F9');
+  assert.deepEqual(r.state.settings, { countdownSeconds: 4, captureMode: 'preserved', maxAnnotations: 4, defaultDeliverAs: 'steer', captureShortcut: 'Control+Alt+F9', globalShortcut: true, consoleLayout: 'timeline' });
+  assert.equal(r.$('shortcut').textContent, '⌃⌥F9');
   assert.equal(r.$('settings').hidden, true); assert.equal(r.$('delivery-mode').value, 'steer');
   assert.match(r.$('capture').title, /Preserved frame/);
 });
@@ -87,4 +87,14 @@ test('Console-only shortcut captures from the focused Console; global mode leave
   r.keyboard.get('keydown')(key('KeyB', { metaKey: true, shiftKey: true }, 'B'));
   r.keyboard.get('keydown')(key('KeyA', { metaKey: true, shiftKey: true }, 'A'));
   assert.equal(r.shortcutCaptures.length, 1);
+});
+test('command pill design: tray and settings request fixed window sizes', async () => {
+  const r = await renderer(); assert.equal(r.$('toolbar').classes['layout-timeline'], true);
+  r.state.settings.consoleLayout = 'pill'; await r.refresh();
+  assert.equal(r.$('toolbar').classes['layout-pill'], true); assert.equal(r.$('toolbar').classes['layout-timeline'], false);
+  assert.equal(r.$('meter-count').textContent, '0/8');
+  await r.handlers.get('tray-toggle')(); assert.deepEqual(r.sizes, ['expanded']); assert.equal(r.$('toolbar').classes['tray-open'], true);
+  await r.handlers.get('toggle-settings')(); assert.equal(r.sizes.at(-1), 'settings'); assert.equal(r.$('console-layout').value, 'pill');
+  await r.handlers.get('cancel-settings')(); assert.equal(r.sizes.at(-1), 'expanded');
+  await r.handlers.get('tray-toggle')(); assert.equal(r.sizes.at(-1), 'collapsed');
 });

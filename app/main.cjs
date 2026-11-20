@@ -8,6 +8,7 @@ const { TOOLBAR_WIDTH, TOOLBAR_HEIGHT, geometry, windowBoxes, selectRegion, nati
 const workflow = import('./workflow.mjs');
 const { loadBounds, saveBounds } = require('./console-size.cjs');
 const { consolePlacement } = require('./console-placement.cjs');
+const { PILL_SIZES, TIMELINE_MIN, TIMELINE_HEIGHT_RATIO, DETAIL_SIZE, layoutBounds, besideBounds } = require('./console-layout.cjs');
 const { accelerator: hyprlandAccelerator, registerShortcut: registerHyprlandShortcut } = require('./hyprland-shortcut.cjs');
 const { nativeWindows, sourceForWindow } = require('./native-windows.cjs');
 const { captureMacWindow } = require('./capture-macos.cjs');
@@ -35,6 +36,15 @@ if (ozone) app.commandLine.appendSwitch('ozone-platform', ozone);
 if (backend || (process.platform === 'linux' && !wayland)) app.commandLine.appendSwitch('force-device-scale-factor', '1');
 const windows = new Set(), delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 let consoleState, initialConsoleBounds, closingConsole = false, shortcutOwner, updatingShortcut = false, recordingShortcut = false;
+// Command pill size state (collapsed bar, open tray or settings) and the timeline's detail popup.
+let pillMode = 'collapsed', detailWindow, detailId;
+// Last mark tool (Area/Freehand); the keyboard shortcut and the on-screen selector reuse it.
+let captureKind = 'rectangle';
+// Drafts keep an unmarked `base` screenshot in memory so marks can be redrawn; it is never sent.
+const wire = list => list.map(({ base, ...item }) => item);
+const marksOf = item => item.marks?.length ? item.marks : [{ kind: item.kind, points: item.points, comment: item.comment }];
+const consoleLimits = () => settings.consoleLayout === 'pill' ? { fixed: true, min: PILL_SIZES[pillMode] } : { min: TIMELINE_MIN };
+const boundsFile = () => join(app.getPath('userData'), 'console-size.json');
 const defaultShortcut = () => info.shortcut || 'CommandOrControl+Shift+A';
 const captureShortcut = (preferences = settings) => preferences.captureShortcut || defaultShortcut();
 const shortcutReady = () => Boolean(shortcutOwner && !shortcutOwner.error);
@@ -114,7 +124,13 @@ async function api(path, body) {
   const response = await fetch(base + path, { method: body ? 'POST' : 'GET', headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
   const value = await response.json(); if (!response.ok) throw new Error(value.error || `Pi bridge returned ${response.status}`); return value;
 }
-function changed() { if (toolbar && !toolbar.isDestroyed()) toolbar.webContents.send('state-changed'); }
+function changed() { for (const win of [toolbar, detailWindow]) if (win && !win.isDestroyed()) win.webContents.send('state-changed'); }
+function closeDetail() { const win = detailWindow; detailWindow = detailId = undefined; if (win && !win.isDestroyed()) win.destroy(); }
+async function relayoutConsole() {
+  if (!consoleState) return;
+  const now = await consoleState.remember();
+  await consoleState.resize(layoutBounds(now, await consoleAreas(), settings.consoleLayout, { mode: pillMode }));
+}
 function status(message) { lastNotice = String(message); if (toolbar && !toolbar.isDestroyed()) toolbar.webContents.send('notice', message); }
 function windowFor(page, title, bounds = { width: TOOLBAR_WIDTH, height: TOOLBAR_HEIGHT }, passive = false) {
   const consoleWindow = page === 'toolbar';
@@ -122,7 +138,7 @@ function windowFor(page, title, bounds = { width: TOOLBAR_WIDTH, height: TOOLBAR
   if (consoleWindow) bounds = initialConsoleBounds;
   // On wlroots, map with fixed-size hints so the Console never joins the tiling
   // layout. The placement controller restores interactive resizing after float.
-  const fixed = !consoleWindow || Boolean(backend);
+  const fixed = !consoleWindow || Boolean(backend) || settings.consoleLayout === 'pill';
   const win = new BrowserWindow({ ...bounds, ...(process.platform === 'linux' ? { type: 'dialog' } : process.platform === 'darwin' ? { type: 'panel', acceptFirstMouse: true } : {}), useContentSize: true, minWidth: fixed ? bounds.width : Math.min(320, bounds.width), minHeight: fixed ? bounds.height : Math.min(360, bounds.height), ...(fixed ? { maxWidth: bounds.width, maxHeight: bounds.height } : {}), frame: false, show: false, enableLargerThanScreen: page === 'desktop', resizable: !fixed, maximizable: false, fullscreenable: false, alwaysOnTop: true, transparent: Boolean(backend) || passive || page === 'desktop', backgroundColor: passive || page === 'desktop' ? '#00000000' : '#161b26', hasShadow: false, focusable: !passive && !inactiveSelector, skipTaskbar: passive || page === 'desktop', autoHideMenuBar: true, title, webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true } });
   windows.add(win);
   if (consoleWindow) {
@@ -130,9 +146,11 @@ function windowFor(page, title, bounds = { width: TOOLBAR_WIDTH, height: TOOLBAR
       bounds, backend, areas: consoleAreas,
       readBounds: () => ownedWindowBounds(win, backend, process.pid),
       float: placement => enforceFloating(win, backend, process.pid, placement),
-      save: placement => saveBounds(join(app.getPath('userData'), 'console-size.json'), placement),
+      save: placement => saveBounds(boundsFile(), { ...placement, layout: settings.consoleLayout }, consoleLimits().min),
       report: error => { console.error('Console positioning:', error.message); status(`Console positioning: ${error.message}`); },
-      snap: true,
+      snap: () => settings.consoleLayout === 'timeline',
+      dock: { heightRatio: TIMELINE_HEIGHT_RATIO },
+      limits: consoleLimits,
     });
   }
   win.on('closed', () => windows.delete(win));
@@ -144,7 +162,7 @@ function windowFor(page, title, bounds = { width: TOOLBAR_WIDTH, height: TOOLBAR
   win.setAlwaysOnTop(true, level);
   win.on('focus', () => { if (!win.isDestroyed()) win.setAlwaysOnTop(true, level); });
   if (!consoleWindow) win.on('show', () => { if (page === 'desktop' && !backend) win.setBounds(bounds, false); void enforceFloating(win, backend, process.pid, bounds).catch(error => { if (!win.isDestroyed() && win.isVisible()) status(`Window positioning: ${error.message}`); }); });
-  if (process.platform === 'darwin' && ['toolbar', 'desktop', 'mark', 'note'].includes(page)) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (process.platform === 'darwin' && ['toolbar', 'desktop', 'mark', 'note', 'popup'].includes(page)) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   if (passive) win.setIgnoreMouseEvents(true);
   win.once('ready-to-show', () => {
     if (win.isDestroyed() || (page === 'desktop' && desktopBackdrop)) return;
@@ -236,6 +254,19 @@ handle('desktop-config', event => {
   const bounds = selectors.get(win);
   return { bounds, kind: desktopKind, background: desktopBackdrop?.preview(bounds) };
 });
+handle('desktop-kind', (event, kind) => {
+  // Switch between Area and Freehand while marking on the live application.
+  if (!selectorFor(event)) throw new Error('No desktop selection');
+  if (!['rectangle', 'freehand'].includes(kind)) throw new Error('Invalid mark tool');
+  desktopKind = captureKind = kind;
+  for (const win of selectors.keys()) if (!win.isDestroyed()) win.webContents.send('desktop-kind', kind);
+  changed();
+});
+handle('capture-kind', (event, kind) => {
+  if (event.sender !== toolbar?.webContents) throw new Error('Only the Console can choose the mark tool');
+  if (!['rectangle', 'freehand'].includes(kind)) throw new Error('Invalid mark tool');
+  captureKind = kind;
+});
 handle('desktop-mark', (event, points, complete) => {
   if (!selectorFor(event)) throw new Error('No desktop selection');
   if (typeof complete !== 'boolean') throw new Error('Invalid selection completion');
@@ -283,11 +314,13 @@ async function capture(options = {}) {
   if (busy()) return;
   capturing = true; captureAbort = new AbortController(); changed();
   try {
-    const { replaceId, copyId, kind = 'rectangle' } = options || {};
+    const { replaceId, copyId, kind = captureKind } = options || {};
     if (!['rectangle', 'freehand'].includes(kind) || (replaceId && copyId)) throw new Error('Invalid capture request');
+    captureKind = kind;
     const previous = (replaceId || copyId) && drafts.find(d => d.id === (replaceId || copyId));
     if ((replaceId || copyId) && !previous) throw new Error('Annotation no longer exists');
     if (!replaceId && drafts.length >= settings.maxAnnotations) throw new Error(`Send or remove some annotations first (${settings.maxAnnotations} per batch).`);
+    closeDetail();
     if (consoleState) await consoleState.hide(); else toolbar.hide();
     if (quitting || captureAbort.signal.aborted) throw new Error('Capture cancelled');
     await waitForCapture(options.delayMs || 0, captureAbort.signal);
@@ -308,9 +341,9 @@ async function capture(options = {}) {
         const marked = await selectOnDesktop(kind, frame);
         region = marked.region;
         const target = applicationForRegion(region, boxes);
-        const points = validateMark(kind, pointsInApp(marked.points, target));
+        const points = validateMark(marked.kind, pointsInApp(marked.points, target));
         liveMarkPoints = pointsInApp(marked.points, region);
-        result = { image: frame.crop(target), source: `${target.label} · whole application (preserved before marking)`, needsAppBounds: false, points };
+        result = { kind: marked.kind, image: frame.crop(target), source: `${target.label} · whole application (preserved before marking)`, needsAppBounds: false, points };
       } else {
         // Live is the default: no frozen backdrop; take evidence after marking.
         let marked;
@@ -323,10 +356,10 @@ async function capture(options = {}) {
           liveMarkPoints = pointsInApp(marked.points, region);
         }
         const target = applicationForRegion(region, await windowBoxes(backend, process.pid));
-        const points = validateMark(kind, marked ? pointsInApp(marked.points, target) : relativeMark(region, target));
+        const points = validateMark(marked?.kind || kind, marked ? pointsInApp(marked.points, target) : relativeMark(region, target));
         await delay(150); // Remove selector surfaces before taking the evidence image.
         const shot = await exec('grim', ['-s', '1', '-g', geometry(target), '-'], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout: 15000, signal: captureAbort.signal });
-        result = { image: nativeImage.createFromBuffer(shot.stdout), source: `${target.label} · whole application`, needsAppBounds: false, points };
+        result = { kind: marked?.kind || kind, image: nativeImage.createFromBuffer(shot.stdout), source: `${target.label} · whole application`, needsAppBounds: false, points };
       }
     } else {
       if (wayland && !backend) throw new Error('This Wayland compositor does not expose the window geometry/overlay placement needed for direct desktop marking. A compositor integration is required; Annotate will not silently switch to a different editor workflow.');
@@ -341,7 +374,7 @@ async function capture(options = {}) {
       const { applicationForRegion, validateMark } = await workflow;
       const target = applicationForRegion(marked.region, candidates);
       region = marked.region;
-      const points = validateMark(kind, pointsInApp(marked.points, target));
+      const points = validateMark(marked.kind, pointsInApp(marked.points, target));
       liveMarkPoints = pointsInApp(marked.points, region);
       await delay(250); // Remove every selector before capturing the application.
       let image;
@@ -354,12 +387,12 @@ async function capture(options = {}) {
         const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 1920, height: 1920 } });
         image = sourceForWindow(sources, target).thumbnail;
       }
-      result = { image, source: `${target.label} · whole application`, needsAppBounds: false, points };
+      result = { kind: marked.kind, image, source: `${target.label} · whole application`, needsAppBounds: false, points };
     }
     if (captureAbort.signal.aborted) throw new Error('Capture cancelled');
     if (!quitting) {
       const image = fit(result.image);
-      frozen = { image: image.toDataURL(), size: image.getSize(), source: result.source.slice(0, 200), needsAppBounds: result.needsAppBounds, kind, points: result.points, liveMarkPoints, replaceId, comment: previous?.comment || '' };
+      frozen = { image: image.toDataURL(), size: image.getSize(), source: result.source.slice(0, 200), needsAppBounds: result.needsAppBounds, kind: result.kind || kind, points: result.points, liveMarkPoints, replaceId, comment: previous?.comment || '' };
       await openLiveNote(region);
     }
   } catch (error) { finishCapture(error.message); }
@@ -375,7 +408,7 @@ handle('target', async (event, id) => {
   routeState = { ...routeState, ...next, available: true }; info.project = next.selected.project; changed();
   await refreshTargets();
 });
-handle('state', () => ({ settings: { ...settings }, preservedCaptureAvailable: Boolean(backend), notice: lastNotice, project: info.project, destinationId: routeState?.selected.id || '', destinations: routeState?.targets || [{ id: '', project: info.project, session: info.session || '', name: 'current session' }], destinationAvailable: routeState?.available !== false, shortcut: captureShortcut(), defaultShortcut: defaultShortcut(), shortcutReady: shortcutReady(), shortcutGlobal: Boolean(shortcutOwner?.global), updatingShortcut, selectedId, sending, capturing: capturing || Boolean(frozen), backend: backend || (wayland ? 'portal' : 'native'), drafts: drafts.map(({ image, ...item }) => ({ ...item, preview: nativeImage.createFromDataURL('data:image/png;base64,' + image).resize({ width: 700 }).toDataURL() })) }));
+handle('state', () => ({ settings: { ...settings }, preservedCaptureAvailable: Boolean(backend), notice: lastNotice, project: info.project, destinationId: routeState?.selected.id || '', destinations: routeState?.targets || [{ id: '', project: info.project, session: info.session || '', name: 'current session' }], destinationAvailable: routeState?.available !== false, shortcut: captureShortcut(), defaultShortcut: defaultShortcut(), shortcutReady: shortcutReady(), shortcutGlobal: Boolean(shortcutOwner?.global), updatingShortcut, selectedId, detailId, pillMode, sending, capturing: capturing || Boolean(frozen), backend: backend || (wayland ? 'portal' : 'native'), captureKind, drafts: drafts.map(({ image, base, ...item }) => ({ ...item, marks: marksOf(item), ready: marksOf(item).every(mark => mark.comment.trim()), preview: nativeImage.createFromDataURL('data:image/png;base64,' + image).resize({ width: 700 }).toDataURL() })) }));
 handle('settings', async (event, value) => {
   if (event.sender !== toolbar?.webContents) throw new Error('Only the Console can change settings');
   requireIdle();
@@ -396,7 +429,9 @@ handle('settings', async (event, value) => {
         if (quitting || closingConsole) throw new Error('The Console is closing. Settings were not changed.');
       }
     }
+    const layoutChanged = next.consoleLayout !== settings.consoleLayout;
     settings = saveSettings(file, next);
+    if (layoutChanged) { pillMode = 'collapsed'; closeDetail(); await relayoutConsole().catch(error => status(`Console positioning: ${error.message}`)); }
     if (candidate) {
       const previous = shortcutOwner;
       shortcutOwner = candidate; candidate = undefined;
@@ -457,8 +492,9 @@ handle('add', async (event, item) => {
     if (valid.width !== pending.size.width || valid.height !== pending.size.height) throw new Error('The screenshot must include the complete app, not a cropped mark');
     const replacing = Boolean(pending.replaceId);
     if (!replacing && drafts.length >= settings.maxAnnotations) throw new Error(`Batch limit reached (${settings.maxAnnotations} annotations).`);
-    const next = commitEntry(drafts, valid, pending.replaceId, randomUUID());
-    if (Buffer.byteLength(JSON.stringify({ id: batchId, items: next })) > MAX_BODY - 1024) throw new Error('This batch is at its size limit. Send existing annotations before adding more.');
+    const entry = { ...valid, marks: [{ kind: valid.kind, points: valid.points, comment: valid.comment }], base: pending.image.replace(/^data:image\/png;base64,/, '') };
+    const next = commitEntry(drafts, entry, pending.replaceId, randomUUID());
+    if (Buffer.byteLength(JSON.stringify({ id: batchId, items: wire(next) })) > MAX_BODY - 1024) throw new Error('This batch is at its size limit. Send existing annotations before adding more.');
     selectedId = pending.replaceId || next.at(-1).id;
     drafts = next; batchId = randomUUID();
     // Let the renderer receive its save acknowledgment before destroying its IPC frame.
@@ -467,8 +503,99 @@ handle('add', async (event, item) => {
   } catch (error) { if (frozen === pending) saving = false; throw error; }
 });
 function requireIdle() { if (busy()) throw new Error('Finish the current capture or send first'); }
-handle('remove', (_event, id) => { requireIdle(); drafts = drafts.filter(d => d.id !== id); if (selectedId === id) selectedId = drafts[0]?.id; batchId = randomUUID(); changed(); });
-handle('comment', (_event, id, comment) => { requireIdle(); if (typeof comment !== 'string' || comment.length > 8000) throw new Error('Invalid comment'); const item = drafts.find(d => d.id === id); if (item) { item.comment = comment; selectedId = id; batchId = randomUUID(); } });
+handle('remove', (_event, id) => {
+  requireIdle();
+  const index = drafts.findIndex(d => d.id === id);
+  drafts = drafts.filter(d => d.id !== id);
+  if (selectedId === id) selectedId = drafts[Math.min(index, drafts.length - 1)]?.id;
+  if (detailId === id) { if (selectedId) detailId = selectedId; else closeDetail(); }
+  batchId = randomUUID(); changed();
+});
+handle('console-size', async (event, mode) => {
+  // Command pill only: the renderer asks for one of the fixed sizes, never arbitrary bounds.
+  if (event.sender !== toolbar?.webContents) throw new Error('Only the Console can resize itself');
+  if (settings.consoleLayout !== 'pill' || !Object.hasOwn(PILL_SIZES, mode)) throw new Error('Invalid Console size');
+  if (pillMode === mode) return;
+  pillMode = mode; await relayoutConsole();
+});
+handle('detail-open', async (event, id, top) => {
+  if (event.sender !== toolbar?.webContents) throw new Error('Only the Console can open annotation details');
+  requireIdle();
+  if (!drafts.some(d => d.id === id)) throw new Error('Annotation no longer exists');
+  const anchor = await consoleState.remember();
+  const bounds = besideBounds(anchor, await consoleAreas(), { top: Number.isFinite(top) ? Math.max(0, Math.min(top, anchor.height)) : 0, size: DETAIL_SIZE });
+  if (!bounds) throw new Error('No display work area is available');
+  const { side, ...placement } = bounds;
+  detailId = selectedId = id;
+  if (detailWindow && !detailWindow.isDestroyed()) {
+    detailWindow.setBounds(placement);
+    await enforceFloating(detailWindow, backend, process.pid, placement).catch(error => status(`Window positioning: ${error.message}`));
+    detailWindow.focus(); changed(); return;
+  }
+  detailWindow = windowFor('popup', 'Annotate Detail', placement);
+  const opened = detailWindow;
+  opened.on('closed', () => { if (detailWindow === opened) detailWindow = detailId = undefined; });
+  changed();
+});
+handle('detail', event => {
+  if (event.sender !== detailWindow?.webContents) throw new Error('No annotation detail in this window');
+  return { id: detailId };
+});
+handle('detail-edit', event => {
+  // Unmarked screenshot and numbered marks for the popup's mark editor.
+  if (event.sender !== detailWindow?.webContents) throw new Error('No annotation detail in this window');
+  const item = drafts.find(d => d.id === detailId);
+  if (!item) throw new Error('Annotation no longer exists');
+  return { id: item.id, base: item.base ? 'data:image/png;base64,' + item.base : undefined, width: item.width, height: item.height, marks: marksOf(item) };
+});
+handle('detail-save', async (event, id, value) => {
+  // Save numbered marks (and, when marks were added/removed, the recomposited image).
+  if (event.sender !== detailWindow?.webContents) throw new Error('No annotation detail in this window');
+  requireIdle();
+  const item = drafts.find(d => d.id === id);
+  if (!item?.base) throw new Error('This annotation cannot be edited. Retake it to add marks.');
+  const { validateMark } = await workflow;
+  if (!Array.isArray(value?.marks) || !value.marks.length || value.marks.length > 20) throw new Error('Use 1–20 marks per annotation');
+  const marks = value.marks.map(mark => {
+    if (typeof mark?.comment !== 'string' || mark.comment.length > 8000) throw new Error('Invalid comment');
+    return { kind: mark.kind, points: validateMark(mark.kind, mark.points), comment: mark.comment };
+  });
+  const { validateBatch, markComments, MAX_BODY } = await import('../bridge.mjs');
+  const comment = markComments(marks.map(mark => ({ ...mark, comment: mark.comment || ' ' }))).trim() || ' ';
+  let image = item.image;
+  if (value.image !== undefined) {
+    const valid = validateBatch({ id: batchId, items: [{ image: value.image, comment, kind: marks[0].kind, points: marks[0].points, source: item.source }] }).items[0];
+    if (valid.width !== item.width || valid.height !== item.height) throw new Error('The edited screenshot must keep the complete app');
+    image = valid.image;
+  }
+  const updated = { ...item, image, marks, kind: marks[0].kind, points: marks[0].points, comment: markComments(marks.map(mark => ({ ...mark, comment: mark.comment.trim() || '…' }))) };
+  if (marks.length === 1) updated.comment = marks[0].comment;
+  const next = drafts.map(d => d.id === id ? updated : d);
+  if (Buffer.byteLength(JSON.stringify({ id: batchId, items: wire(next) })) > MAX_BODY - 1024) throw new Error('This batch is at its size limit. Remove a mark or send existing annotations first.');
+  drafts = next; batchId = randomUUID();
+  // The popup keeps its own editing state; the Console refreshes.
+  if (toolbar && !toolbar.isDestroyed()) toolbar.webContents.send('state-changed');
+  return { count: marks.length };
+});
+handle('detail-show', (event, id) => {
+  if (event.sender !== detailWindow?.webContents) throw new Error('No annotation detail in this window');
+  if (!drafts.some(d => d.id === id)) throw new Error('Annotation no longer exists');
+  detailId = selectedId = id; changed();
+});
+handle('detail-close', event => {
+  if (![toolbar?.webContents, detailWindow?.webContents].includes(event.sender)) throw new Error('No annotation detail to close');
+  closeDetail();
+});
+handle('comment', (event, id, comment) => {
+  requireIdle(); if (typeof comment !== 'string' || comment.length > 8000) throw new Error('Invalid comment');
+  const item = drafts.find(d => d.id === id);
+  if (!item) return;
+  if (item.marks?.length > 1) throw new Error('This annotation has numbered marks. Edit each comment in the annotation popup.');
+  item.comment = comment; if (item.marks?.length) item.marks[0].comment = comment;
+  selectedId = id; batchId = randomUUID();
+  // The typing window keeps its own state; the other (Console or detail popup) refreshes.
+  for (const win of [toolbar, detailWindow]) if (win && !win.isDestroyed() && win.webContents !== event.sender) win.webContents.send('state-changed');
+});
 handle('select', (_event, id) => { if (drafts.some(d => d.id === id)) selectedId = id; });
 handle('clear', async () => {
   requireIdle();
@@ -477,6 +604,8 @@ handle('clear', async () => {
 });
 handle('send', async (_event, expectedDestination, deliverAs = settings.defaultDeliverAs) => {
   requireIdle(); if (!drafts.length) throw new Error('No annotations ready');
+  const missing = drafts.findIndex(d => !marksOf(d).every(mark => mark.comment.trim()));
+  if (missing >= 0) throw new Error(`Annotation ${missing + 1} has a numbered mark without a comment.`);
   if (drafts.length > settings.maxAnnotations) throw new Error('Batch exceeds the configured annotation limit');
   if (!['followUp', 'steer'].includes(deliverAs)) throw new Error('Invalid delivery mode');
   const targetId = routeState?.selected.id;
@@ -485,7 +614,7 @@ handle('send', async (_event, expectedDestination, deliverAs = settings.defaultD
   sending = true; changed();
   try {
     if (consoleState) await consoleState.remember();
-    const result = await api('/submit', { id: batchId, items: drafts, targetId, deliverAs });
+    const result = await api('/submit', { id: batchId, items: wire(drafts), targetId, deliverAs });
     drafts = []; selectedId = undefined; batchId = randomUUID();
     // Keep controls locked and acknowledge Send before closing its IPC window.
     setImmediate(() => { quitting = true; app.quit(); });
@@ -527,7 +656,11 @@ app.whenReady().then(async () => {
       callback({ video: sources[0] });
     } catch { callback({}); }
   }, { useSystemPicker: true });
-  initialConsoleBounds = loadBounds(join(app.getPath('userData'), 'console-size.json'), await consoleAreas());
+  const areas = await consoleAreas(), stored = loadBounds(boundsFile(), areas, consoleLimits().min);
+  // Timeline windows keep user-resized bounds; the pill always starts collapsed.
+  // Bounds saved before designs existed (no layout) get the new default placement.
+  const { layout: storedLayout, ...storedBounds } = stored;
+  initialConsoleBounds = storedLayout === 'timeline' && settings.consoleLayout === 'timeline' ? storedBounds : layoutBounds(storedBounds, areas, settings.consoleLayout, { initial: !storedLayout });
   let shortcutError;
   try { shortcutOwner = await registerCaptureShortcut(captureShortcut()); }
   catch (error) { shortcutError = error.message; }

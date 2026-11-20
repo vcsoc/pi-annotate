@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>10 · Guided Stepper — Annotate Console concept</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0}
+body{font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#edf1fa;background:radial-gradient(900px 600px at 70% 0%,#24405a 0%,#172131 55%,#10151e 100%);min-height:100vh;padding:28px 32px 40px}
+.cap{max-width:1100px;margin:0 0 22px}.cap h1{font-size:20px;margin:0 0 6px}.cap p{margin:4px 0;color:#b8c3da}
+.stage{display:grid;grid-template-columns:repeat(2,480px);gap:30px 40px}
+figure{margin:0;display:flex;flex-direction:column;gap:8px}figcaption{font-size:12px;color:#aab5cc}
+.win{width:480px;height:600px;background:#151b27;border-radius:12px;box-shadow:0 22px 50px #000a,0 0 0 1px #ffffff17;display:flex;flex-direction:column;overflow:hidden;position:relative}
+header{display:flex;align-items:center;gap:7px;padding:10px 8px 6px 16px;cursor:grab}
+header strong{font-size:13.5px}.kbd{font-size:10.5px;border:1px solid #46536d;border-radius:5px;padding:1px 5px;color:#cfd8ee}
+.sp{flex:1}.ib{background:none;border:0;color:#cfd8ee;font-size:15px;width:28px;height:28px;border-radius:7px}.ib.on{background:#263e70}
+.steps{display:flex;align-items:center;padding:8px 16px 12px;gap:0}
+.st{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#8f9bb5;white-space:nowrap}
+.st b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;border:2px solid #46536d;font-size:11px}
+.st.done b{background:#2f7d5b;border-color:#5ec29a;color:#fff}.st.done{color:#cfd8ee}
+.st.cur b{background:#3152af;border-color:#90acf9;color:#fff}.st.cur{color:#fff;font-weight:600}
+.ln{flex:1;height:2px;background:#2e3850;margin:0 6px;min-width:10px}.ln.done{background:#5ec29a}
+.body{flex:1;min-height:0;padding:4px 16px 12px;display:flex;flex-direction:column;gap:12px}
+h2{margin:0;font-size:17px}.lead{margin:-6px 0 0;color:#aab5cc;font-size:12px}
+.choice{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ch{border:1px solid #344057;border-radius:12px;padding:12px;background:#1b2232;display:flex;flex-direction:column;gap:6px}
+.ch.on{border-color:#90acf9;background:#1f3159;box-shadow:0 0 0 1px #90acf9}
+.ch svg{width:100%;height:auto;border-radius:6px;background:#090d15}
+.ch b{font-size:13px}.ch small{color:#aab5cc;font-size:11px}
+.notice{font-size:11.5px;color:#bdcae2;background:#1b2232;border-radius:8px;padding:8px 10px}
+.cta{background:#3152af;border:1px solid #7a99f7;color:#fff;border-radius:10px;padding:11px;font:600 14px system-ui,sans-serif;width:100%}
+.ghost{background:none;border:1px solid #46536d;color:#edf1fa;border-radius:10px;padding:10px 14px;font:13px system-ui,sans-serif}
+.nav{display:flex;gap:8px;padding:12px 16px 14px;border-top:1px solid #2a3347;align-items:center}
+.small{font-size:11px;color:#aab5cc}
+.mk{fill:#ff3b6526;stroke:#ff3b65;stroke-width:1.8}.fh{fill:none;stroke:#ff3b65;stroke-width:2.2;stroke-linecap:round}
+/* review */
+.rv{display:grid;grid-template-columns:1fr;gap:8px;flex:1;min-height:0}
+.big{border-radius:8px;overflow:hidden;background:#090d15;border:1px solid #344057;height:200px;display:flex;justify-content:center}.big svg{height:100%;width:auto}
+textarea{width:100%;height:60px;resize:none;background:#10141d;border:2px solid #ffd45e;border-radius:8px;color:#edf1fa;padding:7px 9px;font:12.5px/1.45 system-ui,sans-serif}
+.pager{display:flex;align-items:center;gap:5px}
+.pg{width:26px;height:26px;border-radius:7px;border:1px solid #344057;display:grid;place-items:center;font-size:11px;color:#aab5cc}
+.pg.on{background:#263e70;border-color:#90acf9;color:#fff}.pg.w{border-color:#e6c88b;color:#e6c88b}.pg.e{border-style:dashed;color:#4b5672}
+.ra{display:flex;gap:5px;align-items:center}.btn{background:#262f43;border:1px solid #46536d;color:#edf1fa;border-radius:7px;padding:5px 9px;font:12px system-ui,sans-serif;white-space:nowrap}.rm{color:#ffbdc9}
+/* send */
+.sec{border:1px solid #344057;border-radius:10px;padding:10px 12px;background:#1b2232}
+.sec .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:#8f9bb5;margin-bottom:6px}
+.sel{display:flex;justify-content:space-between;align-items:center;border:1px solid #46536d;border-radius:8px;padding:8px 10px;background:#10141d;font-size:12.5px}.sel small{color:#8fd19e}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px}.seg div{border:1px solid #344057;border-radius:8px;padding:8px;font-size:12px}.seg div.on{border-color:#90acf9;background:#1f3159}.seg small{display:block;color:#aab5cc;font-size:10.5px}
+.priv{border:1px solid #6b5520;background:#2a2412;border-radius:10px;padding:10px 12px;font-size:12px;color:#f0d79c;display:flex;gap:10px}
+.cb{width:18px;height:18px;border-radius:4px;background:#ffd45e;color:#1a1400;display:grid;place-items:center;font-weight:800;font-size:12px;flex-shrink:0;margin-top:1px}
+.strip{display:flex;gap:5px;margin-top:8px}.strip svg{width:58px;height:36px;border-radius:4px}
+.send{background:#2f7d5b;border:1px solid #5ec29a;color:#fff;border-radius:10px;padding:11px;font:600 14px system-ui,sans-serif;flex:1}
+/* settings drawer */
+.scrim{position:absolute;inset:0;background:#05080fb3}
+.drawer{position:absolute;top:0;right:0;bottom:0;width:400px;background:#1b2232;border-left:1px solid #46536d;box-shadow:-20px 0 40px #0008;display:flex;flex-direction:column}
+.dh{display:flex;align-items:center;padding:12px 10px 8px 16px}.dh b{font-size:15px}
+.chips{display:flex;gap:6px;padding:0 16px 10px;flex-wrap:wrap}.chips span{font-size:11px;padding:3px 9px;border-radius:99px;border:1px solid #46536d;color:#cfd8ee}.chips span.on{background:#3152af;border-color:#7a99f7;color:#fff}
+.db{flex:1;padding:4px 16px;display:flex;flex-direction:column;gap:12px}
+.q{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;padding-bottom:10px;border-bottom:1px solid #2a3347}
+.q b{font-size:12.5px;font-weight:600}.q p{grid-column:1;margin:0;font-size:11px;color:#aab5cc}
+.rec{border:2px solid #ffd45e;border-radius:8px;padding:6px 10px;font-size:12px;color:#ffd45e;background:#10141d;grid-row:span 2}
+.tg{width:38px;height:22px;border-radius:11px;background:#3152af;position:relative;grid-row:span 2}.tg::after{content:"";position:absolute;top:3px;left:19px;width:16px;height:16px;border-radius:50%;background:#fff}
+.stp{display:flex;border:1px solid #46536d;border-radius:7px;grid-row:span 2}.stp span{padding:3px 9px;font-size:12px}.stp span+span{border-left:1px solid #46536d}
+.mini{display:flex;border:1px solid #46536d;border-radius:7px;overflow:hidden;grid-row:span 2}.mini span{padding:4px 8px;font-size:11.5px;color:#aab5cc}.mini span.on{background:#263e70;color:#fff}
+.df{padding:12px 16px 14px;border-top:1px solid #2a3347;display:flex;flex-direction:column;gap:8px}
+.cr{font-size:10.5px;color:#8f9bb5;text-align:center}.cr a{color:#90acf9;text-decoration:none}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="app" viewBox="0 0 160 100"><rect width="160" height="100" fill="#0e1320"/><rect width="160" height="9" fill="#232b3d"/><circle cx="5" cy="4.5" r="1.6" fill="#ff5f57"/><circle cx="10" cy="4.5" r="1.6" fill="#febc2e"/><circle cx="15" cy="4.5" r="1.6" fill="#28c840"/><rect y="9" width="34" height="91" fill="#171f30"/><rect x="5" y="15" width="22" height="3" rx="1" fill="#3a4766"/><rect x="5" y="22" width="18" height="3" rx="1" fill="#3a4766"/><rect x="5" y="29" width="24" height="3" rx="1" fill="#5d79c9"/><rect x="5" y="36" width="16" height="3" rx="1" fill="#3a4766"/><rect x="40" y="14" width="64" height="6" rx="1.5" fill="#cfd8ee"/><rect x="122" y="13" width="30" height="8" rx="2" fill="#3152af"/><rect x="40" y="26" width="112" height="30" rx="2" fill="#1f2a44"/><rect x="45" y="31" width="44" height="3" fill="#5a6c96"/><rect x="45" y="37" width="80" height="2" fill="#3a4766"/><rect x="45" y="42" width="70" height="2" fill="#3a4766"/><path d="M95 52 L105 44 L115 48 L128 36 L146 40" fill="none" stroke="#5ec29a" stroke-width="1.5"/><rect x="40" y="62" width="54" height="30" rx="2" fill="#1f2a44"/><rect x="98" y="62" width="54" height="30" rx="2" fill="#1f2a44"/><rect x="45" y="67" width="30" height="3" fill="#5a6c96"/><rect x="103" y="67" width="34" height="3" fill="#5a6c96"/></symbol></defs></svg>
+
+<div class="cap"><h1>10 · Guided Stepper</h1>
+<p><b>Idea:</b> turn the hint line (“Capture → mark → note → save → send”) into the UI itself: a 4-step progress header (Capture · Mark &amp; note · Review · Send). Each step shows only what matters, which suits first-time users and makes the privacy check an explicit step. Settings slide in as a drawer with chip anchors and one-line rows.</p>
+<p><b>Size:</b> 480 × 600. <b>Trade-offs:</b> the most guided and least cluttered, but slower for repeat batches (mitigated: the shortcut and “Capture another” jump straight back to step 1, and steps are clickable).</p></div>
+
+<div class="stage">
+<figure><div class="win">
+ <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="sp"></span><button class="ib">⚙</button><button class="ib">×</button></header>
+ <div class="steps"><span class="st cur"><b>1</b>Capture</span><span class="ln"></span><span class="st"><b>2</b>Mark &amp; note</span><span class="ln"></span><span class="st"><b>3</b>Review</span><span class="ln"></span><span class="st"><b>4</b>Send</span></div>
+ <div class="body">
+  <h2>How do you want to mark it?</h2><p class="lead">The Console hides, waits 1 second, then you mark an area in any app.</p>
+  <div class="choice">
+   <div class="ch on"><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="40" y="26" width="112" height="30" rx="2"/></svg><b>▭ Area</b><small>Drag a rectangle around the problem.</small></div>
+   <div class="ch"><svg viewBox="0 0 160 100"><use href="#app"/><path class="fh" d="M92 54 C96 40 120 30 140 34 C152 38 150 52 136 55 C120 58 100 60 92 54Z"/></svg><b>✎ Freehand</b><small>Circle or underline any shape.</small></div>
+  </div>
+  <div class="notice">No annotations yet. Each entry keeps the <b>whole app with your mark</b>, plus your note. Send only when ready.</div>
+  <div class="sp"></div>
+  <button class="cta">＋ Capture (1s)</button>
+  <div class="small" style="text-align:center">or press ⌘⇧A from any app — no countdown</div>
+ </div>
+</div><figcaption>Step 1 — empty batch, choose the mark tool</figcaption></figure>
+
+<figure><div class="win">
+ <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="sp"></span><button class="ib">⚙</button><button class="ib">×</button></header>
+ <div class="steps"><span class="st done"><b>✓</b>Capture</span><span class="ln done"></span><span class="st done"><b>✓</b>Mark &amp; note</span><span class="ln done"></span><span class="st cur"><b>3</b>Review</span><span class="ln"></span><span class="st"><b>4</b>Send</span></div>
+ <div class="body">
+  <div class="pager"><span class="pg">1</span><span class="pg on">2</span><span class="pg w" title="Needs a note">3</span><span class="pg e">4</span><span class="pg e">5</span><span class="pg e">6</span><span class="pg e">7</span><span class="pg e">8</span><span class="sp"></span><span class="small">3/8 · #3 needs a note</span></div>
+  <div class="big"><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="119" y="10" width="36" height="14" rx="2"/></svg></div>
+  <textarea aria-label="Selected annotation text">Primary button label is clipped at narrow widths — shorten to “Save”.</textarea>
+  <div class="ra"><button class="btn">↻ Retake</button><button class="btn" title="Capture a new annotation using this note">⊕ Reuse note</button><button class="btn rm">Remove</button><span class="sp"></span><button class="btn rm" title="Discard all annotations">Discard all</button></div>
+  <div class="notice">Capture → mark an app area → add a note → ✓ save here. Send only when ready.</div>
+ </div>
+ <div class="nav"><button class="ghost">＋ Capture another</button><span class="sp"></span><button class="cta" style="width:auto;padding:10px 16px">Continue to Send →</button></div>
+</div><figcaption>Step 3 — review one at a time; pager shows capacity</figcaption></figure>
+
+<figure><div class="win">
+ <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="sp"></span><button class="ib">⚙</button><button class="ib">×</button></header>
+ <div class="steps"><span class="st done"><b>✓</b>Capture</span><span class="ln done"></span><span class="st done"><b>✓</b>Mark &amp; note</span><span class="ln done"></span><span class="st done"><b>✓</b>Review</span><span class="ln done"></span><span class="st cur"><b>4</b>Send</span></div>
+ <div class="body">
+  <div class="sec"><div class="l">Send to project / Pi session</div><div class="sel"><span>pi-annotate — console redesign</span><small>● live ▾</small></div></div>
+  <div class="sec"><div class="l">Send as</div><div class="seg"><div class="on">Follow-up<small>Waits for the current task.</small></div><div>Queued (steering)<small>Read at the next tool boundary.</small></div></div></div>
+  <div class="priv"><span class="cb">✓</span><div>I reviewed the screenshots. Send shares all 3 annotations with the selected Pi session; each image includes the <b>entire application</b> with the area highlighted.
+   <div class="strip"><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="40" y="60" width="56" height="34"/></svg><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="119" y="10" width="36" height="14"/></svg><svg viewBox="0 0 160 100"><use href="#app"/><path class="fh" d="M92 54 C96 40 120 30 140 34 C152 38 150 52 136 55 C120 58 100 60 92 54Z"/></svg></div></div></div>
+ </div>
+ <div class="nav"><button class="ghost">← Review</button><button class="send">➤ Send 3 annotations</button></div>
+</div><figcaption>Step 4 — destination, mode and an explicit privacy check</figcaption></figure>
+
+<figure><div class="win">
+ <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="sp"></span><button class="ib on">⚙</button><button class="ib">×</button></header>
+ <div class="steps"><span class="st cur"><b>1</b>Capture</span><span class="ln"></span><span class="st"><b>2</b>Mark</span><span class="ln"></span><span class="st"><b>3</b>Review</span><span class="ln"></span><span class="st"><b>4</b>Send</span></div>
+ <div class="scrim"></div>
+ <div class="drawer">
+  <div class="dh"><b>Settings</b><span class="sp"></span><button class="ib">×</button></div>
+  <div class="chips"><span class="on">Shortcut</span><span>Capture</span><span>Batch</span></div>
+  <div class="db">
+   <div class="q"><b>Capture shortcut</b><span class="rec">Press the new shortcut…</span><p>Backspace = launch default ⌘⇧A</p></div>
+   <div class="q"><b>Global shortcut</b><span class="tg" role="switch" aria-checked="true"></span><p>On: any app · Off: only when Console focused</p></div>
+   <div class="q"><b>Capture countdown</b><span class="stp"><span>−</span><span>1 s</span><span>+</span></span><p>0–30 s · Capture &amp; Retake only</p></div>
+   <div class="q"><b>Capture mode</b><span class="mini"><span class="on">Live</span><span>Preserved</span></span><p>Hyprland / sway · Preserved keeps menus</p></div>
+   <div class="q"><b>Maximum annotations</b><span class="stp"><span>−</span><span>8</span><span>+</span></span><p>Per batch · 1–12</p></div>
+   <div class="q" style="border:0"><b>Default send as</b><span class="mini"><span class="on">Follow-up</span><span>Queued</span></span><p>Pre-selected in step 4</p></div>
+  </div>
+  <div class="df"><div style="display:flex;gap:8px"><button class="ghost" style="flex:1">Cancel</button><button class="cta" style="flex:2">Save settings</button></div><div class="cr">Developed by Chris Visser · <a href="#">github.com/vcsoc</a></div></div>
+ </div>
+</div><figcaption>Settings drawer — one-line rows, chip anchors</figcaption></figure>
+</div>
+</body></html>

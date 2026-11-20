@@ -180,7 +180,7 @@ for (const mode of ['live', 'preserved']) for (const kind of ['rectangle', 'free
     const calls = [], areas = [{ x: 0, y: 0, width: 1920, height: 1080 }];
     const target = { x: 0, y: 0, width: 640, height: 420, label: 'Test app' };
     const region = { x: 100, y: 100, width: 200, height: 100 };
-    const marked = { region, points: kind === 'rectangle' ? [[100, 100], [300, 200]] : [[100, 100], [300, 150], [150, 200]] };
+    const marked = { kind, region, points: kind === 'rectangle' ? [[100, 100], [300, 200]] : [[100, 100], [300, 150], [150, 200]] };
     const image = { getSize: () => ({ width: 640, height: 420 }), toPNG: () => Buffer.from(png(), 'base64'), toDataURL: () => 'data:image/png;base64,' + png() };
     const frame = { areas, crop: box => { calls.push('crop'); assert.equal(box.width, 640); return image; }, preview() {} };
     const c = controller({
@@ -209,7 +209,7 @@ test('combined settings persist atomically, enforce limits, retain drafts and pr
   assert.equal((await c.invoke('state')).settings.maxAnnotations, 8);
   await assert.rejects(c.invoke('settings', [{ countdownSeconds: 0 }]), /Only the Console/);
   await c.invoke('settings', [{ countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer' }], c.consoleWindow);
-  assert.deepEqual(saved, { countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer', captureShortcut: '', globalShortcut: true });
+  assert.deepEqual(saved, { countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer', captureShortcut: '', globalShortcut: true, consoleLayout: 'timeline' });
   const items = [0, 1].map(i => ({ id: 'old-' + i, image: png(), comment: 'Keep me' })); c.seed(undefined, items);
   await assert.rejects(c.invoke('settings', [{ maxAnnotations: 1 }], c.consoleWindow), /Finish the current capture/);
   await assert.rejects(c.invoke('add', [{ image: png(), comment: 'Over limit' }]), /Batch limit/);
@@ -271,6 +271,63 @@ test('global shortcut toggle swaps OS registration for a Console-only shortcut a
   assert.equal(await c.invoke('shortcut-capture', [], c.consoleWindow), true); assert.deepEqual(calls, [0]);
   await c.invoke('settings', [{ globalShortcut: true }], c.consoleWindow);
   assert.deepEqual([...active.keys()], ['Control+Alt+F9']); assert.equal((await c.invoke('state')).shortcutGlobal, true);
+});
+test('command pill sizes are fixed and requested only by the Console; switching design re-lays out the window', async () => {
+  const resized = [];
+  const c = controller({ saveSettings: (_file, next) => next, workAreas: async () => [{ x: 0, y: 0, width: 1440, height: 900 }] });
+  c.context.resized = resized;
+  c.evaluate("consoleState = { remember: async () => ({ x: 1114, y: 200, width: 320, height: 540 }), resize: async bounds => { resized.push(bounds); } };");
+  await assert.rejects(c.invoke('console-size', ['expanded'], c.consoleWindow), /Invalid Console size/);
+  await c.invoke('settings', [{ consoleLayout: 'pill' }], c.consoleWindow);
+  assert.deepEqual(resized.at(-1), { width: 600, height: 56, x: 840, y: 200 });
+  await assert.rejects(c.invoke('console-size', ['expanded']), /Only the Console/);
+  await assert.rejects(c.invoke('console-size', ['huge'], c.consoleWindow), /Invalid Console size/);
+  await c.invoke('console-size', ['expanded'], c.consoleWindow);
+  assert.deepEqual(resized.at(-1), { width: 600, height: 440, x: 840, y: 200 });
+  assert.equal((await c.invoke('state')).pillMode, 'expanded');
+  await c.invoke('settings', [{ consoleLayout: 'timeline' }], c.consoleWindow);
+  assert.equal(resized.at(-1).height, 540); assert.equal(c.evaluate('pillMode'), 'collapsed');
+});
+test('detail popup is opened only from the Console and follows removal', async () => {
+  const c = controller(); c.evaluate("drafts = [{ id: 'one', image: '', comment: 'One' }];");
+  const id = 'one';
+  await assert.rejects(c.invoke('detail-open', [id, 10]), /Only the Console/);
+  await assert.rejects(c.invoke('detail-open', ['missing', 10], c.consoleWindow), /no longer exists/);
+  await assert.rejects(c.invoke('detail'), /No annotation detail/);
+  c.evaluate('detailWindow = note; detailId = drafts[0].id;');
+  assert.equal((await c.invoke('detail')).id, id);
+  await c.invoke('remove', [id], c.consoleWindow);
+  assert.equal(c.evaluate('detailId'), undefined);
+});
+test('popup saves numbered marks with their own comments; Send waits for every mark comment', async () => {
+  const c = controller(); c.seed(); await c.invoke('add', [{ image: png(), comment: 'First' }]); c.flush();
+  const id = c.evaluate('drafts[0].id');
+  assert.equal(c.evaluate('drafts[0].base.length > 0'), true);
+  let state = await c.invoke('state', [], c.consoleWindow);
+  assert.equal(state.drafts[0].base, undefined); assert.equal(state.drafts[0].marks.length, 1); assert.equal(state.drafts[0].ready, true);
+  c.evaluate('detailWindow = consoleWindow; detailId = drafts[0].id;');
+  const edit = await c.invoke('detail-edit', [], c.consoleWindow);
+  assert.match(edit.base, /^data:image\/png;base64,/); assert.equal(edit.marks[0].comment, 'First');
+  const second = { kind: 'freehand', points: [[.5, .5], [.7, .6], [.6, .8]], comment: '' };
+  await c.invoke('detail-save', [id, { marks: [...edit.marks, second], image: png() }], c.consoleWindow);
+  state = await c.invoke('state', [], c.consoleWindow);
+  assert.equal(state.drafts[0].marks.length, 2); assert.equal(state.drafts[0].ready, false);
+  c.evaluate("routeState = { selected: { id: 'target' }, available: true };");
+  await assert.rejects(c.invoke('send', ['target'], c.consoleWindow), /mark without a comment/);
+  await assert.rejects(c.invoke('comment', [id, 'flat'], c.consoleWindow), /numbered marks/);
+  await assert.rejects(c.invoke('detail-save', [id, { marks: [...edit.marks, second], image: png(100, 100) }], c.consoleWindow), /complete app/);
+  await c.invoke('detail-save', [id, { marks: [edit.marks[0], { ...second, comment: 'Second' }] }], c.consoleWindow);
+  assert.equal(c.evaluate('drafts[0].comment'), '1. First\n2. Second');
+  await c.invoke('send', ['target'], c.consoleWindow);
+  const sent = c.submissions.at(-1).items[0];
+  assert.equal(sent.base, undefined); assert.equal(sent.marks[1].comment, 'Second'); assert.equal(sent.kind, 'rectangle');
+});
+test('mark tool choice is remembered for the shortcut and can be switched while marking', async () => {
+  const c = controller();
+  await c.invoke('capture-kind', ['freehand'], c.consoleWindow);
+  assert.equal((await c.invoke('state')).captureKind, 'freehand');
+  await assert.rejects(c.invoke('capture-kind', ['circle'], c.consoleWindow), /Invalid mark tool/);
+  await assert.rejects(c.invoke('desktop-kind', ['rectangle'], c.consoleWindow), /No desktop selection/);
 });
 test('Send forwards both visible destination and mode; invalid modes keep drafts', async () => {
   const c = controller(); c.seed(); await c.invoke('add', [{ image: png(), comment: 'Ready' }]); c.flush();

@@ -17,7 +17,11 @@ export async function deliverBatch(value, { cwd, session, assertActive = () => {
     await writeFile(join(folder, filename), Buffer.from(item.image, 'base64'), { mode: 0o600 });
     const { image, ...detail } = item;
     metadata.push({ ...detail, file: filename });
-    content.push({ type: 'text', text: `Annotation ${index + 1} — ${item.source}\nComment: ${item.comment}\nSelection: ${item.kind}; points: ${JSON.stringify(item.points)}\nScreenshot: ${join(folder, filename)}` });
+    // Several marks: each is numbered in the screenshot and has its own comment.
+    const detailText = item.marks?.length > 1
+      ? `Marks (numbered badges in the screenshot):\n${item.marks.map((mark, n) => `${n + 1}. ${mark.comment}\n   Selection: ${mark.kind}; points: ${JSON.stringify(mark.points)}`).join('\n')}`
+      : `Comment: ${item.comment}\nSelection: ${item.kind}; points: ${JSON.stringify(item.points)}`;
+    content.push({ type: 'text', text: `Annotation ${index + 1} — ${item.source}\n${detailText}\nScreenshot: ${join(folder, filename)}` });
     content.push({ type: 'image', data: image, mimeType: 'image/png' });
   }
   await writeFile(join(folder, 'annotations.json'), JSON.stringify({ id: batch.id, session, project: cwd, deliverAs: batch.deliverAs, createdAt: new Date().toISOString(), items: metadata }, null, 2), { mode: 0o600 });

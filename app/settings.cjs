@@ -1,7 +1,7 @@
 const { readFileSync, writeFileSync, mkdirSync, openSync, fsyncSync, closeSync, renameSync, rmSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { randomUUID } = require('node:crypto');
-const DEFAULTS = Object.freeze({ countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp', captureShortcut: '', globalShortcut: true });
+const DEFAULTS = Object.freeze({ countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp', captureShortcut: '', globalShortcut: true, consoleLayout: 'timeline' });
 function validateShortcut(value) {
   if (typeof value === 'string' && value.length <= 128) {
     if (!value.trim()) return '';
@@ -20,7 +20,9 @@ function validateSettings(value) {
   if (!['followUp', 'steer'].includes(defaultDeliverAs)) throw new Error('Choose Follow-up or Queued (steering) as the default.');
   const { globalShortcut = DEFAULTS.globalShortcut } = value;
   if (typeof globalShortcut !== 'boolean') throw new Error('Global shortcut must be on or off.');
-  return { countdownSeconds: value.countdownSeconds, captureMode, maxAnnotations, defaultDeliverAs, captureShortcut: validateShortcut(value.captureShortcut === undefined ? DEFAULTS.captureShortcut : value.captureShortcut), globalShortcut };
+  const { consoleLayout = DEFAULTS.consoleLayout } = value;
+  if (!['timeline', 'pill'].includes(consoleLayout)) throw new Error('Choose the Timeline feed or Command pill design.');
+  return { countdownSeconds: value.countdownSeconds, captureMode, maxAnnotations, defaultDeliverAs, captureShortcut: validateShortcut(value.captureShortcut === undefined ? DEFAULTS.captureShortcut : value.captureShortcut), globalShortcut, consoleLayout };
 }
 function loadSettings(file) {
   // Preserve preferences written by the earlier dedicated settings build.

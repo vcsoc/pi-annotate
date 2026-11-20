@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>05 · Split Pane Workbench — Annotate Console concept</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0}
+body{font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#edf1fa;background:radial-gradient(1200px 700px at 50% 0%,#2f3d5c 0%,#1a2030 55%,#11151e 100%);min-height:100vh;padding:28px 32px 40px}
+.cap{max-width:1300px;margin:0 0 22px}.cap h1{font-size:20px;margin:0 0 6px}.cap p{margin:4px 0;color:#b8c3da}
+.stage{display:flex;gap:36px;align-items:flex-start}
+figure{margin:0;display:flex;flex-direction:column;gap:8px}figcaption{font-size:12px;color:#aab5cc}
+.win{width:760px;height:520px;background:#161b26;border-radius:10px;box-shadow:0 22px 50px #000a,0 0 0 1px #ffffff17;display:flex;flex-direction:column;overflow:hidden;position:relative}
+header{height:40px;display:flex;align-items:center;gap:8px;padding:0 8px 0 14px;background:#1b2130;border-bottom:1px solid #2a3347;cursor:grab;flex-shrink:0}
+header strong{font-size:13px}.kbd{font-size:10.5px;border:1px solid #46536d;border-radius:5px;padding:1px 5px;color:#cfd8ee}
+.sp{flex:1}.ib{background:none;border:0;color:#cfd8ee;font-size:15px;width:28px;height:28px;border-radius:6px}.ib.on{background:#263e70}
+.bar{display:flex;align-items:center;gap:6px;padding:8px 14px;border-bottom:1px solid #2a3347;flex-shrink:0}
+.btn{background:#262f43;border:1px solid #46536d;color:#edf1fa;border-radius:6px;padding:5px 9px;font:12px system-ui,sans-serif;white-space:nowrap}
+.pri{background:#3152af;border-color:#7a99f7;color:#fff;font-weight:600}
+.seg{display:flex;border:1px solid #46536d;border-radius:6px;overflow:hidden}.seg span{padding:5px 9px;font-size:12px;color:#aab5cc;white-space:nowrap}.seg span.on{background:#263e70;color:#fff}
+.vsep{width:1px;height:22px;background:#344057;margin:0 4px}
+.lbl{font-size:11px;color:#aab5cc;white-space:nowrap}
+.dd{display:flex;align-items:center;gap:6px;border:1px solid #46536d;border-radius:6px;padding:5px 9px;font-size:12px;background:#10141d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dd small{color:#8fd19e}
+.panes{flex:1;min-height:0;display:grid;grid-template-columns:250px 1fr}
+.left{border-right:1px solid #2a3347;display:flex;flex-direction:column;min-height:0}
+.lh{display:flex;justify-content:space-between;padding:8px 12px;font-size:11px;color:#aab5cc;text-transform:uppercase;letter-spacing:.06em}
+.list{flex:1;overflow:hidden;padding:0 8px;display:flex;flex-direction:column;gap:4px}
+.it{display:grid;grid-template-columns:20px 64px 1fr;gap:8px;align-items:center;padding:6px;border-radius:7px;border:1px solid transparent}
+.it .n{font-size:11px;color:#8f9bb5;text-align:center}
+.it svg{width:64px;height:40px;border-radius:4px;background:#090d15;display:block}
+.it p{margin:0;font-size:11.5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.it.on{background:#263e70;border-color:#90acf9}
+.it .miss{color:#e6c88b;font-style:italic}
+.notice{margin:8px;padding:7px 9px;font-size:11px;color:#bdcae2;background:#1b2232;border-radius:7px}
+.right{display:flex;flex-direction:column;padding:12px 14px;gap:8px;min-height:0}
+.rh{display:flex;align-items:center;gap:8px;font-size:12px}.rh b{font-size:13px}.rh span{color:#aab5cc;font-size:11.5px}
+.big{flex:1;min-height:0;border-radius:8px;background:#090d15;border:1px solid #2a3347;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.big svg{height:100%;width:auto;max-width:100%;display:block}
+textarea{width:100%;height:74px;resize:none;background:#10141d;border:2px solid #ffd45e;border-radius:7px;color:#edf1fa;padding:7px 9px;font:12.5px/1.45 system-ui,sans-serif}
+.ra{display:flex;gap:6px;align-items:center}.ra .rm{color:#ffbdc9}
+.status{display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid #2a3347;background:#1b2130;font-size:11px;color:#e6c88b;flex-shrink:0}
+.snd{background:#3152af;border:1px solid #7a99f7;color:#fff;border-radius:7px;padding:6px 14px;font:600 12px system-ui,sans-serif;white-space:nowrap}
+.mk{fill:#ff3b6526;stroke:#ff3b65;stroke-width:1.6}.fh{fill:none;stroke:#ff3b65;stroke-width:2;stroke-linecap:round}
+/* settings modal */
+.dim{position:absolute;inset:40px 0 0;background:#06080dcc}
+.modal{position:absolute;left:60px;right:60px;top:64px;bottom:24px;background:#1b2130;border:1px solid #46536d;border-radius:12px;box-shadow:0 20px 40px #000b;display:grid;grid-template-columns:170px 1fr;overflow:hidden}
+.nav{background:#141925;border-right:1px solid #2a3347;padding:14px 8px;display:flex;flex-direction:column;gap:2px}
+.nav h3{margin:0 8px 10px;font-size:14px}
+.nav a{display:flex;gap:8px;align-items:center;padding:7px 9px;border-radius:6px;font-size:12.5px;color:#cfd8ee;text-decoration:none}.nav a.on{background:#263e70;color:#fff;box-shadow:inset 3px 0 0 #90acf9}
+.nav a small{margin-left:auto;color:#8f9bb5;font-size:10.5px}
+.nav .cr{margin-top:auto;padding:8px;font-size:10.5px;color:#8f9bb5}.nav .cr a{padding:0;color:#90acf9;display:inline}
+.form{display:flex;flex-direction:column;padding:16px 18px;gap:14px}
+.form h4{margin:0;font-size:14px}.form .sub{font-size:11.5px;color:#aab5cc;margin:-10px 0 0}
+.fr{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:start}
+.fr label{font-size:12px;padding-top:7px}
+.help{font-size:11px;color:#aab5cc;margin:5px 0 0}
+.rec{border:2px solid #ffd45e;border-radius:7px;padding:7px 10px;font-size:12.5px;background:#10141d;display:flex;justify-content:space-between}.rec em{font-style:normal;color:#ffd45e}
+.swr{display:flex;align-items:center;gap:10px;padding-top:4px;font-size:12px}
+.tg{width:38px;height:22px;border-radius:11px;background:#3152af;position:relative;flex-shrink:0}.tg::after{content:"";position:absolute;top:3px;left:19px;width:16px;height:16px;border-radius:50%;background:#fff}
+.mf{margin-top:auto;display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #2a3347}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="app" viewBox="0 0 160 100"><rect width="160" height="100" fill="#0e1320"/><rect width="160" height="9" fill="#232b3d"/><circle cx="5" cy="4.5" r="1.6" fill="#ff5f57"/><circle cx="10" cy="4.5" r="1.6" fill="#febc2e"/><circle cx="15" cy="4.5" r="1.6" fill="#28c840"/><rect y="9" width="34" height="91" fill="#171f30"/><rect x="5" y="15" width="22" height="3" rx="1" fill="#3a4766"/><rect x="5" y="22" width="18" height="3" rx="1" fill="#3a4766"/><rect x="5" y="29" width="24" height="3" rx="1" fill="#5d79c9"/><rect x="5" y="36" width="16" height="3" rx="1" fill="#3a4766"/><rect x="40" y="14" width="64" height="6" rx="1.5" fill="#cfd8ee"/><rect x="122" y="13" width="30" height="8" rx="2" fill="#3152af"/><rect x="40" y="26" width="112" height="30" rx="2" fill="#1f2a44"/><rect x="45" y="31" width="44" height="3" fill="#5a6c96"/><rect x="45" y="37" width="80" height="2" fill="#3a4766"/><rect x="45" y="42" width="70" height="2" fill="#3a4766"/><path d="M95 52 L105 44 L115 48 L128 36 L146 40" fill="none" stroke="#5ec29a" stroke-width="1.5"/><rect x="40" y="62" width="54" height="30" rx="2" fill="#1f2a44"/><rect x="98" y="62" width="54" height="30" rx="2" fill="#1f2a44"/><rect x="45" y="67" width="30" height="3" fill="#5a6c96"/><rect x="103" y="67" width="34" height="3" fill="#5a6c96"/></symbol></defs></svg>
+
+<div class="cap"><h1>05 · Split Pane Workbench</h1>
+<p><b>Idea:</b> a desktop-mail style window: one toolbar row (Capture · mark tool · destination · send mode), a numbered list on the left and a large review pane on the right. This is the current layout taken to a comfortable width. Settings open as a modal with a category sidebar, so each group shows on one screen.</p>
+<p><b>Size:</b> 760 × 520 (min ≈ 640 × 420). <b>Trade-offs:</b> best for reviewing many annotations, but it covers more of the app being annotated; it is too wide to dock usefully, so it falls back to the stacked layout below ≈ 560px.</p></div>
+
+<div class="stage">
+<figure><div class="win">
+ <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="sp"></span><button class="ib" title="Settings">⚙</button><button class="ib" title="Close">×</button></header>
+ <div class="bar">
+  <button class="btn pri">＋ Capture (1s)</button>
+  <div class="seg" title="Mark tool"><span class="on">▭ Area</span><span>✎ Freehand</span></div>
+  <div class="vsep"></div>
+  <span class="lbl">Send to</span><span class="dd" style="max-width:200px">pi-annotate — console redesign <small>●</small> ▾</span>
+  <span class="lbl">as</span><div class="seg"><span class="on" title="Waits for the current task to finish">Follow-up</span><span title="Queued (steering): read at the next tool boundary">Queued</span></div>
+ </div>
+ <div class="panes">
+  <div class="left">
+   <div class="lh"><span>Annotations</span><span>4/8</span></div>
+   <div class="list">
+    <div class="it"><span class="n">1</span><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="40" y="60" width="56" height="34" rx="2"/></svg><p>Card padding differs from header; use 16px.</p></div>
+    <div class="it on"><span class="n">2</span><svg viewBox="0 0 160 100"><use href="#app"/><path class="fh" d="M92 54 C96 40 120 30 140 34 C152 38 150 52 136 55 C120 58 100 60 92 54Z"/></svg><p>Chart line is too thin on dark backgrounds.</p></div>
+    <div class="it"><span class="n">3</span><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="119" y="10" width="36" height="14" rx="2"/></svg><p>Primary button label is clipped.</p></div>
+    <div class="it"><span class="n">4</span><svg viewBox="0 0 160 100"><use href="#app"/><rect class="mk" x="2" y="12" width="32" height="30" rx="2"/></svg><p class="miss">(Add annotation text)</p></div>
+   </div>
+   <div class="notice">Capture → mark an app area → add a note → ✓ save here. Send only when ready.</div>
+  </div>
+  <div class="right">
+   <div class="rh"><b>#2</b><span>Grafana — Latency dashboard · Freehand</span><span class="sp"></span><span>4/8</span></div>
+   <div class="big"><svg viewBox="0 0 160 100"><use href="#app"/><path class="fh" d="M92 54 C96 40 120 30 140 34 C152 38 150 52 136 55 C120 58 100 60 92 54Z"/></svg></div>
+   <textarea aria-label="Selected annotation text">Chart line is too thin on dark backgrounds; use 2px and add point markers so values are readable.</textarea>
+   <div class="ra"><button class="btn">↻ Retake</button><button class="btn" title="Capture a new annotation using this note">⊕ Capture with this note</button><span class="sp"></span><button class="btn rm">Remove</button></div>
+  </div>
+ </div>
+ <div class="status"><span>⚠ Send shares all annotations with the selected Pi session. Each image includes the <b>entire application</b> with your area highlighted.</span><span class="sp"></span><button class="btn" style="color:#ffbdc9">Discard all</button><button class="snd" disabled style="opacity:.5" title="Add text to #4 first">➤ Send 4</button></div>
+</div><figcaption>Main — 760 × 520 (Send waits for #4’s note)</figcaption></figure>
+
+<figure><div class="win">
+ <header><strong>✎ Annotate Console</strong><span class="kbd">⌘⇧A</span><span class="sp"></span><button class="ib on">⚙</button><button class="ib">×</button></header>
+ <div class="bar"><button class="btn pri">＋ Capture (1s)</button><div class="seg"><span class="on">▭ Area</span><span>✎ Freehand</span></div></div>
+ <div class="dim"></div>
+ <div class="modal">
+  <nav class="nav"><h3>Settings</h3>
+   <a class="on" href="#">⌨ Shortcut <small>⌘⇧A</small></a><a href="#">◷ Capture <small>1s</small></a><a href="#">▤ Batch <small>8</small></a><a href="#">➤ Sending <small>Follow-up</small></a>
+   <div class="cr">Developed by Chris Visser<br><a href="#">github.com/vcsoc</a></div></nav>
+  <div class="form">
+   <h4>Shortcut</h4><p class="sub">Starts capture immediately — no countdown.</p>
+   <div class="fr"><label>Capture shortcut</label><div><div class="rec"><em>Press the new shortcut…</em><span style="color:#8f9bb5">was ⌘⇧A</span></div><p class="help">Click the field and press the key combination, e.g. ⌘/Ctrl+Shift+A. Backspace clears it to use the launch default.</p></div></div>
+   <div class="fr"><label>Global shortcut</label><div><div class="swr"><span class="tg" role="switch" aria-checked="true"></span>Works from any app</div><p class="help">Off: the shortcut only works while the Annotate Console is focused.</p></div></div>
+   <div class="mf"><button class="btn">Cancel</button><button class="btn pri">Save settings</button></div>
+  </div>
+ </div>
+</div><figcaption>Settings modal — category sidebar with current values</figcaption></figure>
+</div>
+</body></html>

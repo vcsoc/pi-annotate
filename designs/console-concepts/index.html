@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Annotate Console — design concepts</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0}
+body{font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#edf1fa;background:#121621;padding:32px 40px 48px}
+h1{font-size:24px;margin:0 0 4px}.lead{color:#aab5cc;margin:0 0 6px;max-width:900px}
+.legend{display:flex;gap:16px;align-items:center;font-size:12.5px;color:#aab5cc;margin:14px 0 22px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600}
+.narrow{background:#ffd45e;color:#1a1400}.other{background:#263e70;color:#dfe7ff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+a.card{display:flex;flex-direction:column;text-decoration:none;color:inherit;background:#1b2232;border:1px solid #344057;border-radius:12px;overflow:hidden;transition:border-color .15s,transform .15s}
+a.card:hover,a.card:focus-visible{border-color:#90acf9;transform:translateY(-2px);outline:none}
+a.card:focus-visible{box-shadow:0 0 0 3px #ffd45e}
+.thumb{height:190px;background:#0b0e15 center top/cover no-repeat;border-bottom:1px solid #344057}
+.meta{padding:12px 14px 14px;display:flex;flex-direction:column;gap:6px}
+.meta h2{margin:0;font-size:15px;display:flex;align-items:center;gap:8px}
+.meta h2 .n{color:#7a99f7;font-variant-numeric:tabular-nums}
+.meta p{margin:0;font-size:12.5px;color:#bdcae2}
+.meta .sz{font-size:11.5px;color:#8f9bb5}
+footer{margin-top:28px;font-size:12px;color:#8f9bb5}
+</style></head><body>
+<h1>Annotate Console — 10 design concepts</h1>
+<p class="lead">Static, self-contained mockups. Every concept covers the real feature set: Capture with countdown, Area / Freehand marks, Discard all, Send with count, Send as (Follow-up / Queued), destination session, notice line, drafts with Retake / Reuse / Remove and an editable selected note, privacy warning, and reorganised Settings (shortcut recorder, global toggle, countdown, capture mode, batch maximum, default send as).</p>
+<div class="legend"><span><span class="tag narrow">Narrow panel</span> 280–340px wide, full-height, docks to the left/right screen edge (6px gap)</span><span><span class="tag other">Window</span> other layouts</span></div>
+<div class="grid">
+ <a class="card" href="01-icon-rail-dock.html"><div class="thumb" style="background-image:url(previews/01-icon-rail-dock.png)"></div><div class="meta"><h2><span class="n">01</span>Icon Rail Dock <span class="tag narrow">Narrow panel</span></h2><p>Slim tool rail + stacked list with the selected draft expanded inline; accordion settings with summaries.</p><span class="sz">320 × full height · docked right</span></div></a>
+ <a class="card" href="02-timeline-feed.html"><div class="thumb" style="background-image:url(previews/02-timeline-feed.png)"></div><div class="meta"><h2><span class="n">02</span>Timeline Feed <span class="tag narrow">Narrow panel</span></h2><p>Chronological feed with source app and time, split Capture button, chat-style send bar; grouped-row settings.</p><span class="sz">300 × full height · docked left</span></div></a>
+ <a class="card" href="03-filmstrip-drawer.html"><div class="thumb" style="background-image:url(previews/03-filmstrip-drawer.png)"></div><div class="meta"><h2><span class="n">03</span>Filmstrip Drawer <span class="tag narrow">Narrow panel</span></h2><p>One big annotation at a time over a capacity filmstrip; bottom action dock; three in-panel settings tabs.</p><span class="sz">340 × full height · docked right</span></div></a>
+ <a class="card" href="04-command-pill.html"><div class="thumb" style="background-image:url(previews/04-command-pill.png)"></div><div class="meta"><h2><span class="n">04</span>Command Pill <span class="tag other">Window</span></h2><p>Floating 56px pill with a batch dot meter that unfolds into a tray; settings as an anchored two-column popover.</p><span class="sz">600 × 56 → 600 × 440</span></div></a>
+ <a class="card" href="05-split-pane.html"><div class="thumb" style="background-image:url(previews/05-split-pane.png)"></div><div class="meta"><h2><span class="n">05</span>Split Pane Workbench <span class="tag other">Window</span></h2><p>Mail-style toolbar, list left and large review pane right; settings modal with a category sidebar.</p><span class="sz">760 × 520</span></div></a>
+ <a class="card" href="06-card-grid.html"><div class="thumb" style="background-image:url(previews/06-card-grid.png)"></div><div class="meta"><h2><span class="n">06</span>Card Grid Board <span class="tag other">Window</span></h2><p>Mood-board grid of annotation cards with a lightbox editor; settings as a tile dashboard.</p><span class="sz">640 × 560</span></div></a>
+ <a class="card" href="07-tabbed-console.html"><div class="thumb" style="background-image:url(previews/07-tabbed-console.png)"></div><div class="meta"><h2><span class="n">07</span>Tabbed Console <span class="tag other">Window</span></h2><p>Closest to today: Annotations / Send / Settings tabs, settings split into General / Capture / Batch sub-tabs.</p><span class="sz">420 × 600</span></div></a>
+ <a class="card" href="08-paper-inbox-light.html"><div class="thumb" style="background-image:url(previews/08-paper-inbox-light.png)"></div><div class="meta"><h2><span class="n">08</span>Paper Inbox (light) <span class="tag other">Window</span></h2><p>Light, minimal mail-inbox look with a “To:” header; settings as one editable sentence.</p><span class="sz">440 × 620</span></div></a>
+ <a class="card" href="09-high-contrast.html"><div class="thumb" style="background-image:url(previews/09-high-contrast.png)"></div><div class="meta"><h2><span class="n">09</span>High Contrast &amp; Keyboard First <span class="tag other">Window</span></h2><p>Black/white/yellow, large targets, text-labelled states and access keys; fieldset settings in one view.</p><span class="sz">480 × 760</span></div></a>
+ <a class="card" href="10-guided-stepper.html"><div class="thumb" style="background-image:url(previews/10-guided-stepper.png)"></div><div class="meta"><h2><span class="n">10</span>Guided Stepper <span class="tag other">Window</span></h2><p>Capture → Mark &amp; note → Review → Send wizard with an explicit privacy step; settings drawer.</p><span class="sz">480 × 600</span></div></a>
+</div>
+<footer>Open any file directly in a browser — no network access needed. PNG previews live in <code>previews/</code>.</footer>
+</body></html>

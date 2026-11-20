@@ -4,9 +4,26 @@ const { dockBounds, undockBounds, same } = require('./console-snap.cjs');
 
 // Wayland BrowserWindow.getBounds() may report (0, 0), not the compositor's
 // actual position. Read owned compositor geometry before hiding or persisting.
-function consolePlacement(win, { bounds, backend, areas, readBounds, float, save, report = () => {}, snap = false }) {
+// `limits()` returns { min, fixed }: a fixed Console (command pill) keeps exactly
+// its programmatic size; otherwise `min` is the smallest user-resizable size.
+// `snap` may be a boolean or a function so docking can depend on the design.
+function consolePlacement(win, { bounds, backend, areas, readBounds, float, save, report = () => {}, snap = false, dock: dock_ = {}, limits }) {
   let current = { ...bounds }, generation = 0, readVersion = 0, placing = false, disposed = false, timer, docked;
   const alive = () => !disposed && !win.isDestroyed();
+  const snapping = () => Boolean(typeof snap === 'function' ? snap() : snap);
+  const limit = () => limits?.() || { min: { width: 320, height: 360 } };
+  function applyLimits() {
+    const { min, fixed } = limit();
+    if (fixed) {
+      win.setResizable(false);
+      win.setMinimumSize(current.width, current.height);
+      win.setMaximumSize(current.width, current.height);
+    } else {
+      win.setMaximumSize(0, 0);
+      win.setMinimumSize(Math.min(min.width, current.width), Math.min(min.height, current.height));
+      win.setResizable(true);
+    }
+  }
   async function remember() {
     if (!alive() || placing || !win.isVisible() || win.isMinimized?.() || win.isFullScreen?.()) return current;
     const token = generation, version = ++readVersion;
@@ -29,7 +46,7 @@ function consolePlacement(win, { bounds, backend, areas, readBounds, float, save
       let available;
       try { available = await areas(); } catch (error) { report(error); }
       if (!isCurrent()) return;
-      if (available) current = consoleBounds(current, available);
+      if (available) current = consoleBounds(current, available, limit().min);
       if (backend) {
         // Equal min/max hints make this a floating surface at its FIRST map,
         // before IPC can see it. Unlock resizing only after floating placement.
@@ -44,9 +61,7 @@ function consolePlacement(win, { bounds, backend, areas, readBounds, float, save
       if (backend) await float({ ...current, isCurrent });
       if (!isCurrent() || !win.isVisible()) return;
       if (backend) {
-        win.setMaximumSize(0, 0);
-        win.setMinimumSize(Math.min(320, current.width), Math.min(360, current.height));
-        win.setResizable(true);
+        applyLimits();
         win.setOpacity(1);
       }
       win.focus();
@@ -70,15 +85,34 @@ function consolePlacement(win, { bounds, backend, areas, readBounds, float, save
   }
   // After a drag settles, dock to a nearby left/right screen edge (6px gap),
   // or restore the pre-dock height when a docked Console is dragged away.
+  // Resize/move programmatically (design switch, pill tray). Applies when shown.
+  async function resize(target) {
+    if (!alive()) return current;
+    current = { ...target };
+    if (!win.isVisible()) return current;
+    const token = ++generation;
+    placing = true;
+    const isCurrent = () => alive() && token === generation;
+    try {
+      win.setResizable(false);
+      win.setMaximumSize(0, 0);
+      win.setMinimumSize(1, 1);
+      win.setBounds(current);
+      if (backend) await float({ ...current, isCurrent });
+      if (isCurrent()) applyLimits();
+    } catch (error) { if (isCurrent()) report(error); }
+    finally { if (isCurrent()) { placing = false; await remember(); } }
+    return current;
+  }
   async function settle() {
-    if (!snap) return remember();
+    if (!snapping()) return remember();
     if (!alive() || placing || !win.isVisible()) return current;
     const token = generation, isCurrent = () => alive() && !placing && token === generation && win.isVisible();
     try {
       const [actual, available] = await Promise.all([readBounds(), areas()]);
       if (!isCurrent() || !actual || !['x', 'y', 'width', 'height'].every(k => Number.isFinite(actual[k]))) return current;
       let target;
-      const dock = dockBounds(actual, available);
+      const dock = dockBounds(actual, available, dock_);
       if (dock) {
         const { side, ...dockedBounds } = dock;
         if (!docked) docked = { side, restoreHeight: actual.height };
@@ -98,12 +132,12 @@ function consolePlacement(win, { bounds, backend, areas, readBounds, float, save
   }
   function scheduleRemember() {
     if (!alive() || placing || !win.isVisible()) return;
-    clearTimeout(timer); timer = setTimeout(() => { void settle(); }, snap ? 350 : 200);
+    clearTimeout(timer); timer = setTimeout(() => { void settle(); }, snapping() ? 350 : 200);
   }
   function dispose() { disposed = true; ++generation; clearTimeout(timer); }
   win.on('move', scheduleRemember);
   win.on('resize', scheduleRemember);
   win.once('closed', dispose);
-  return { show, hide, remember, settle, dispose, docked: () => docked?.side };
+  return { show, hide, remember, settle, resize, dispose, docked: () => docked?.side, bounds: () => ({ ...current }) };
 }
 module.exports = { consolePlacement };
