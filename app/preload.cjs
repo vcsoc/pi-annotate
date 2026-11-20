@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('annotate', {
   state: () => ipcRenderer.invoke('state'),
   settings: value => ipcRenderer.invoke('settings', value),
+  shortcutRecording: active => ipcRenderer.invoke('shortcut-recording', active),
+  shortcutCapture: () => ipcRenderer.invoke('shortcut-capture'),
   developerPage: () => ipcRenderer.invoke('developer-page'),
   target: id => ipcRenderer.invoke('target', id),
   desktopConfig: () => ipcRenderer.invoke('desktop-config'),

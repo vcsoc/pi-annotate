@@ -1,6 +1,7 @@
 import { normalizedPoint, validSelection, selectionBounds, drawMark } from './geometry.mjs';
 import { placeNote } from './workflow.mjs';
 import { projectLabel } from './project-label.mjs';
+import { recordShortcut, matchesShortcut } from './shortcut-keys.mjs';
 const api = window.annotate;
 const $ = id => document.getElementById(id);
 const page = new URLSearchParams(location.search).get('page');
@@ -79,7 +80,7 @@ if (page === 'toolbar') {
       $('save-settings').disabled = $('cancel-settings').disabled = disabled || settingsSaving;
       $('toggle-settings').disabled = disabled || settingsSaving;
       $('capture-mode').disabled = disabled || settingsSaving || !state.preservedCaptureAvailable;
-      for (const id of ['capture-shortcut', 'capture-countdown', 'max-annotations', 'default-delivery']) $(id).disabled = disabled || settingsSaving;
+      for (const id of ['capture-shortcut', 'global-shortcut', 'capture-countdown', 'max-annotations', 'default-delivery']) $(id).disabled = disabled || settingsSaving;
       $('delivery-mode').disabled = disabled || settingsSaving;
       if (appliedDefault !== state.settings.defaultDeliverAs) {
         $('delivery-mode').value = state.settings.defaultDeliverAs;
@@ -103,7 +104,7 @@ if (page === 'toolbar') {
       $('project').value = state.destinationId;
       $('project').title = state.project; $('project').disabled = disabled;
       $('shortcut').textContent = state.shortcutReady ? state.shortcut.replace(/CommandOrControl|CmdOrCtrl/gi, /Mac/.test(navigator.platform) ? '⌘' : 'Ctrl') : 'Use Capture';
-      $('shortcut').title = state.shortcutReady ? 'Start capture immediately' : `Capture shortcut unavailable: ${state.shortcut}`;
+      $('shortcut').title = state.shortcutReady ? (state.shortcutGlobal ? 'Start capture immediately from any app' : 'Start capture immediately while the Console is focused') : `Capture shortcut unavailable: ${state.shortcut}`;
       $('send').disabled = disabled || !state.destinationAvailable || !state.drafts.length || state.drafts.some(d => !d.comment.trim());
       $('send-count').textContent = String(state.drafts.length);
       $('send').title = state.sending ? 'Sending annotations…' : `Send all ${state.drafts.length} annotations to ${state.project}`;
@@ -152,6 +153,7 @@ if (page === 'toolbar') {
     if (!$('settings').hidden) { closeSettings(); return; }
     $('capture-shortcut').value = state.settings.captureShortcut;
     $('capture-shortcut').placeholder = state.defaultShortcut;
+    $('global-shortcut').checked = state.settings.globalShortcut !== false;
     $('capture-countdown').value = state.settings.countdownSeconds;
     $('capture-mode').value = state.settings.captureMode;
     $('max-annotations').value = state.settings.maxAnnotations;
@@ -168,13 +170,50 @@ if (page === 'toolbar') {
     settingsSaving = true; $('save-settings').disabled = $('cancel-settings').disabled = true;
     $('settings-status').textContent = 'Saving settings…';
     try {
-      await api.settings({ captureShortcut: $('capture-shortcut').value, countdownSeconds: Number($('capture-countdown').value), captureMode: $('capture-mode').value, maxAnnotations: Number($('max-annotations').value), defaultDeliverAs: $('default-delivery').value });
+      await api.settings({ captureShortcut: $('capture-shortcut').value, globalShortcut: $('global-shortcut').checked, countdownSeconds: Number($('capture-countdown').value), captureMode: $('capture-mode').value, maxAnnotations: Number($('max-annotations').value), defaultDeliverAs: $('default-delivery').value });
       await refresh(); closeSettings();
     } catch (error) { $('settings-status').textContent = error.message || String(error); }
     finally { settingsSaving = false; await refresh().catch(report); }
   });
+  // The shortcut field records the pressed combination instead of accepting typed text.
+  const mac = /Mac/.test(navigator.platform), field = $('capture-shortcut');
+  let recording = false, recorded = '';
+  const plain = event => !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
+  const restorePreview = () => { if (field.value.endsWith('…')) field.value = recorded; };
+  field.addEventListener('focus', () => {
+    recording = true; recorded = field.value; field.classList.toggle('recording', true);
+    $('settings-status').textContent = 'Press the new shortcut…';
+    // Pause the active shortcut so pressing it records instead of capturing.
+    void api.shortcutRecording(true).catch(report);
+  });
+  field.addEventListener('blur', () => {
+    recording = false; restorePreview(); field.classList.toggle('recording', false);
+    if ($('settings-status').textContent === 'Press the new shortcut…') $('settings-status').textContent = '';
+    void api.shortcutRecording(false).catch(report);
+  });
+  field.addEventListener('input', () => { recorded = field.value; });
+  field.addEventListener('keyup', event => { if (plain(event)) restorePreview(); });
+  field.addEventListener('keydown', event => {
+    if (plain(event) && (event.key === 'Tab' || event.key === 'Escape')) { restorePreview(); return; }
+    event.preventDefault(); event.stopPropagation();
+    if (plain(event) && (event.key === 'Backspace' || event.key === 'Delete')) {
+      field.value = recorded = '';
+      $('settings-status').textContent = `Cleared. The launch default ${state.defaultShortcut} will be used.`;
+      return;
+    }
+    const result = recordShortcut(event, mac);
+    if (result.accelerator) {
+      field.value = recorded = result.accelerator;
+      $('settings-status').textContent = `Recorded ${result.accelerator}. Save settings to apply.`;
+    } else if (result.error) $('settings-status').textContent = result.error;
+    else field.value = result.pending || recorded;
+  });
   window.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !$('settings').hidden && !settingsSaving) { event.preventDefault(); closeSettings(); }
+    if (event.key === 'Escape' && !$('settings').hidden && !settingsSaving) { event.preventDefault(); closeSettings(); return; }
+    // Console-only mode: the shortcut works while this window has keyboard focus.
+    if (!recording && state?.shortcutReady && !state.shortcutGlobal && matchesShortcut(event, state.shortcut, mac)) {
+      event.preventDefault(); void api.shortcutCapture().catch(report);
+    }
   });
   $('developer-link').addEventListener('click', event => { event.preventDefault(); void api.developerPage().catch(report); });
   action('capture', () => api.capture({ kind: $('capture-kind').value }));

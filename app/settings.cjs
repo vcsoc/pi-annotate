@@ -1,7 +1,7 @@
 const { readFileSync, writeFileSync, mkdirSync, openSync, fsyncSync, closeSync, renameSync, rmSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { randomUUID } = require('node:crypto');
-const DEFAULTS = Object.freeze({ countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp', captureShortcut: '' });
+const DEFAULTS = Object.freeze({ countdownSeconds: 1, captureMode: 'live', maxAnnotations: 8, defaultDeliverAs: 'followUp', captureShortcut: '', globalShortcut: true });
 function validateShortcut(value) {
   if (typeof value === 'string' && value.length <= 128) {
     if (!value.trim()) return '';
@@ -18,7 +18,9 @@ function validateSettings(value) {
   if (!['live', 'preserved'].includes(captureMode)) throw new Error('Choose Live marking or Preserved frame.');
   if (!Number.isInteger(maxAnnotations) || maxAnnotations < 1 || maxAnnotations > 12) throw new Error('Maximum annotations must be a whole number from 1 to 12.');
   if (!['followUp', 'steer'].includes(defaultDeliverAs)) throw new Error('Choose Follow-up or Queued (steering) as the default.');
-  return { countdownSeconds: value.countdownSeconds, captureMode, maxAnnotations, defaultDeliverAs, captureShortcut: validateShortcut(value.captureShortcut === undefined ? DEFAULTS.captureShortcut : value.captureShortcut) };
+  const { globalShortcut = DEFAULTS.globalShortcut } = value;
+  if (typeof globalShortcut !== 'boolean') throw new Error('Global shortcut must be on or off.');
+  return { countdownSeconds: value.countdownSeconds, captureMode, maxAnnotations, defaultDeliverAs, captureShortcut: validateShortcut(value.captureShortcut === undefined ? DEFAULTS.captureShortcut : value.captureShortcut), globalShortcut };
 }
 function loadSettings(file) {
   // Preserve preferences written by the earlier dedicated settings build.

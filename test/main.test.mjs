@@ -209,7 +209,7 @@ test('combined settings persist atomically, enforce limits, retain drafts and pr
   assert.equal((await c.invoke('state')).settings.maxAnnotations, 8);
   await assert.rejects(c.invoke('settings', [{ countdownSeconds: 0 }]), /Only the Console/);
   await c.invoke('settings', [{ countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer' }], c.consoleWindow);
-  assert.deepEqual(saved, { countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer', captureShortcut: '' });
+  assert.deepEqual(saved, { countdownSeconds: 3, captureMode: 'preserved', maxAnnotations: 2, defaultDeliverAs: 'steer', captureShortcut: '', globalShortcut: true });
   const items = [0, 1].map(i => ({ id: 'old-' + i, image: png(), comment: 'Keep me' })); c.seed(undefined, items);
   await assert.rejects(c.invoke('settings', [{ maxAnnotations: 1 }], c.consoleWindow), /Finish the current capture/);
   await assert.rejects(c.invoke('add', [{ image: png(), comment: 'Over limit' }]), /Batch limit/);
@@ -254,6 +254,23 @@ for (const hyprland of [true, false]) test(`changing capture shortcuts is immedi
   await save('');
   assert.equal((await c.invoke('state')).shortcut, launch);
   assert.deepEqual([...active.keys()], [launch]);
+});
+test('global shortcut toggle swaps OS registration for a Console-only shortcut and recording pauses it', async () => {
+  const active = new Map(), calls = [];
+  const c = controller({ globalShortcut: { register: (value, callback) => { active.set(value, callback); return true; }, unregister: value => active.delete(value) }, saveSettings: (_file, next) => next });
+  c.context.calls = calls;
+  await c.evaluate("info.shortcut = 'Control+Alt+F9'; capture = options => calls.push(options.delayMs); registerCaptureShortcut(captureShortcut()).then(owner => { shortcutOwner = owner; });");
+  assert.deepEqual([...active.keys()], ['Control+Alt+F9']);
+  await c.invoke('shortcut-recording', [true], c.consoleWindow); assert.equal(active.size, 0);
+  await c.invoke('shortcut-recording', [false], c.consoleWindow); assert.deepEqual([...active.keys()], ['Control+Alt+F9']);
+  assert.equal(await c.invoke('shortcut-capture', [], c.consoleWindow), false);
+  await c.invoke('settings', [{ globalShortcut: false }], c.consoleWindow);
+  assert.equal(active.size, 0);
+  const state = await c.invoke('state'); assert.equal(state.shortcutGlobal, false); assert.equal(state.shortcutReady, true);
+  await assert.rejects(c.invoke('shortcut-capture'), /Only the Console/);
+  assert.equal(await c.invoke('shortcut-capture', [], c.consoleWindow), true); assert.deepEqual(calls, [0]);
+  await c.invoke('settings', [{ globalShortcut: true }], c.consoleWindow);
+  assert.deepEqual([...active.keys()], ['Control+Alt+F9']); assert.equal((await c.invoke('state')).shortcutGlobal, true);
 });
 test('Send forwards both visible destination and mode; invalid modes keep drafts', async () => {
   const c = controller(); c.seed(); await c.invoke('add', [{ image: png(), comment: 'Ready' }]); c.flush();

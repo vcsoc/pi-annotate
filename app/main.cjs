@@ -34,12 +34,16 @@ if (ozone) app.commandLine.appendSwitch('ozone-platform', ozone);
 // This is local to the companion; desktop font/monitor settings are untouched.
 if (backend || (process.platform === 'linux' && !wayland)) app.commandLine.appendSwitch('force-device-scale-factor', '1');
 const windows = new Set(), delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-let consoleState, initialConsoleBounds, closingConsole = false, shortcutOwner, updatingShortcut = false;
+let consoleState, initialConsoleBounds, closingConsole = false, shortcutOwner, updatingShortcut = false, recordingShortcut = false;
 const defaultShortcut = () => info.shortcut || 'CommandOrControl+Shift+A';
 const captureShortcut = (preferences = settings) => preferences.captureShortcut || defaultShortcut();
 const shortcutReady = () => Boolean(shortcutOwner && !shortcutOwner.error);
-function shortcutIdentity(value) {
+function shortcutIdentity(value, global = true) {
+  if (!global) return 'console:' + keyIdentity(value);
   if (backend === 'hyprland') return hyprlandAccelerator(value).chord;
+  return keyIdentity(value);
+}
+function keyIdentity(value) {
   const modifiers = new Map([
     ['ctrl', 'control'], ['cmd', 'command'], ['option', 'alt'], ['meta', 'super'],
     ['cmdorctrl', process.platform === 'darwin' ? 'command' : 'control'],
@@ -49,11 +53,17 @@ function shortcutIdentity(value) {
   const key = parts.pop();
   return [...parts.map(part => modifiers.get(part) || part).sort(), key].join('+');
 }
-async function registerCaptureShortcut(value) {
-  const owner = { identity: shortcutIdentity(value) };
+async function registerCaptureShortcut(value, global = settings.globalShortcut) {
+  const owner = { identity: shortcutIdentity(value, global), global };
   // A candidate cannot capture until registration and the settings write both succeed.
-  const trigger = () => { if (shortcutOwner === owner && !owner.error) void capture({ delayMs: 0 }); };
-  if (backend === 'hyprland') {
+  // While the Settings field records a new combination the old one must not capture.
+  const trigger = () => { if (shortcutOwner === owner && !owner.error && !recordingShortcut) void capture({ delayMs: 0 }); };
+  owner.trigger = trigger;
+  if (!global) {
+    // Console-only: the renderer reports matching key presses while it has focus.
+    keyIdentity(value);
+    owner.stop = () => {};
+  } else if (backend === 'hyprland') {
     owner.stop = (await registerHyprlandShortcut(value, trigger, error => {
       owner.error = error;
       if (shortcutOwner === owner && !quitting) { status(error.message); changed(); }
@@ -63,7 +73,16 @@ async function registerCaptureShortcut(value) {
     try { registered = globalShortcut.register(value, trigger); }
     catch { throw new Error(`Invalid capture shortcut: ${value}. Use a modifier and key, e.g. CommandOrControl+Alt+A.`); }
     if (!registered) throw new Error(`Cannot register ${value}. It may be invalid, reserved or already in use. Choose another capture shortcut.`);
-    owner.stop = () => globalShortcut.unregister(value);
+    owner.stop = () => { if (!owner.paused) globalShortcut.unregister(value); };
+    // Release the OS grab while recording so the same keys can be pressed into the field.
+    owner.pause = () => { if (!owner.paused) { globalShortcut.unregister(value); owner.paused = true; } };
+    owner.resume = () => {
+      if (!owner.paused) return;
+      owner.paused = false;
+      let restored = false;
+      try { restored = globalShortcut.register(value, trigger); } catch { /* reported below */ }
+      if (!restored) { owner.error = new Error(`Cannot re-register ${value}. Choose another capture shortcut.`); status(owner.error.message); changed(); }
+    };
   }
   return owner;
 }
@@ -113,6 +132,7 @@ function windowFor(page, title, bounds = { width: TOOLBAR_WIDTH, height: TOOLBAR
       float: placement => enforceFloating(win, backend, process.pid, placement),
       save: placement => saveBounds(join(app.getPath('userData'), 'console-size.json'), placement),
       report: error => { console.error('Console positioning:', error.message); status(`Console positioning: ${error.message}`); },
+      snap: true,
     });
   }
   win.on('closed', () => windows.delete(win));
@@ -355,7 +375,7 @@ handle('target', async (event, id) => {
   routeState = { ...routeState, ...next, available: true }; info.project = next.selected.project; changed();
   await refreshTargets();
 });
-handle('state', () => ({ settings: { ...settings }, preservedCaptureAvailable: Boolean(backend), notice: lastNotice, project: info.project, destinationId: routeState?.selected.id || '', destinations: routeState?.targets || [{ id: '', project: info.project, session: info.session || '', name: 'current session' }], destinationAvailable: routeState?.available !== false, shortcut: captureShortcut(), defaultShortcut: defaultShortcut(), shortcutReady: shortcutReady(), updatingShortcut, selectedId, sending, capturing: capturing || Boolean(frozen), backend: backend || (wayland ? 'portal' : 'native'), drafts: drafts.map(({ image, ...item }) => ({ ...item, preview: nativeImage.createFromDataURL('data:image/png;base64,' + image).resize({ width: 700 }).toDataURL() })) }));
+handle('state', () => ({ settings: { ...settings }, preservedCaptureAvailable: Boolean(backend), notice: lastNotice, project: info.project, destinationId: routeState?.selected.id || '', destinations: routeState?.targets || [{ id: '', project: info.project, session: info.session || '', name: 'current session' }], destinationAvailable: routeState?.available !== false, shortcut: captureShortcut(), defaultShortcut: defaultShortcut(), shortcutReady: shortcutReady(), shortcutGlobal: Boolean(shortcutOwner?.global), updatingShortcut, selectedId, sending, capturing: capturing || Boolean(frozen), backend: backend || (wayland ? 'portal' : 'native'), drafts: drafts.map(({ image, ...item }) => ({ ...item, preview: nativeImage.createFromDataURL('data:image/png;base64,' + image).resize({ width: 700 }).toDataURL() })) }));
 handle('settings', async (event, value) => {
   if (event.sender !== toolbar?.webContents) throw new Error('Only the Console can change settings');
   requireIdle();
@@ -366,12 +386,12 @@ handle('settings', async (event, value) => {
   let candidate;
   try {
     // Unrelated settings can still be saved when the current shortcut is unavailable.
-    if (next.captureShortcut !== settings.captureShortcut) {
-      const identity = shortcutIdentity(proposed);
+    if (next.captureShortcut !== settings.captureShortcut || next.globalShortcut !== settings.globalShortcut) {
+      const identity = shortcutIdentity(proposed, next.globalShortcut);
       if (!shortcutReady() || identity !== shortcutOwner.identity) {
         updatingShortcut = true; changed();
         if (shortcutOwner?.error) await releaseShortcut(shortcutOwner);
-        candidate = await registerCaptureShortcut(proposed);
+        candidate = await registerCaptureShortcut(proposed, next.globalShortcut);
         if (candidate.error) throw candidate.error;
         if (quitting || closingConsole) throw new Error('The Console is closing. Settings were not changed.');
       }
@@ -387,6 +407,17 @@ handle('settings', async (event, value) => {
     if (candidate) await releaseShortcut(candidate);
     updatingShortcut = false; changed();
   }
+});
+handle('shortcut-recording', (event, active) => {
+  if (event.sender !== toolbar?.webContents) throw new Error('Only the Console can record shortcuts');
+  recordingShortcut = active === true;
+  if (shortcutOwner?.global) recordingShortcut ? shortcutOwner.pause?.() : shortcutOwner.resume?.();
+});
+handle('shortcut-capture', event => {
+  // Console-only shortcut: pressed while the Console window has keyboard focus.
+  if (event.sender !== toolbar?.webContents) throw new Error('Only the Console can use the Console shortcut');
+  if (!shortcutOwner || shortcutOwner.global || busy()) return false;
+  shortcutOwner.trigger(); return true;
 });
 handle('developer-page', event => {
   if (event.sender !== toolbar?.webContents) throw new Error('Only the Console can open this link');
@@ -518,7 +549,7 @@ app.whenReady().then(async () => {
     } finally { closingConsole = false; }
   });
   if (shortcutError) status(shortcutError);
-  await api('/status', { message: shortcutReady() ? `Annotate Console ready. Mark an app area with ${captureShortcut()}` : `Annotate Console ready. Use Capture; shortcut ${captureShortcut()} is unavailable.${shortcutError ? ` ${shortcutError}` : ''}` });
+  await api('/status', { message: shortcutReady() ? `Annotate Console ready. Mark an app area with ${captureShortcut()}${shortcutOwner.global ? '' : ' (while the Console is focused)'}` : `Annotate Console ready. Use Capture; shortcut ${captureShortcut()} is unavailable.${shortcutError ? ` ${shortcutError}` : ''}` });
   const destinations = setInterval(() => { void refreshTargets().catch(error => status(`Destinations: ${error.message}`)); }, 1000); destinations.unref();
   const watchdog = setInterval(() => api('/session').catch(() => { quitting = true; app.quit(); }), 5000); watchdog.unref();
 }).catch(error => { dialog.showErrorBox('Annotate Console', error.message); app.exit(1); });

@@ -13,7 +13,9 @@
     <h2>Settings</h2>
     <label for="capture-shortcut">Capture shortcut</label>
     <input id="capture-shortcut" type="text" maxlength="128" spellcheck="false" autocomplete="off" aria-describedby="capture-shortcut-help">
-    <p id="capture-shortcut-help" class="muted">Type a shortcut like CommandOrControl+Alt+A. Clear it to use the launch default shown in the field. The shortcut starts capture immediately.</p>
+    <p id="capture-shortcut-help" class="muted">Click the field and press the key combination to use, e.g. ⌘/Ctrl+Shift+A. Backspace clears it to use the launch default shown in the field. The shortcut starts capture immediately.</p>
+    <label class="switch-row" for="global-shortcut"><span>Global shortcut (works from any app)</span><input id="global-shortcut" type="checkbox" role="switch" aria-describedby="global-shortcut-help"><span class="switch" aria-hidden="true"></span></label>
+    <p id="global-shortcut-help" class="muted">On: the shortcut starts annotation from anywhere in the operating system. Off: it only works while the Annotate Console is focused.</p>
     <label for="capture-countdown">Capture countdown (seconds)</label>
     <input id="capture-countdown" type="number" min="0" max="30" step="1" value="1">
     <p class="muted">Wait before Capture or Retake so you can reopen a menu. Set 0 for no delay. The keyboard shortcut always captures immediately.</p>

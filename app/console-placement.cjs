@@ -1,10 +1,11 @@
 'use strict';
 const { consoleBounds } = require('./console-size.cjs');
+const { dockBounds, undockBounds, same } = require('./console-snap.cjs');
 
 // Wayland BrowserWindow.getBounds() may report (0, 0), not the compositor's
 // actual position. Read owned compositor geometry before hiding or persisting.
-function consolePlacement(win, { bounds, backend, areas, readBounds, float, save, report = () => {} }) {
-  let current = { ...bounds }, generation = 0, readVersion = 0, placing = false, disposed = false, timer;
+function consolePlacement(win, { bounds, backend, areas, readBounds, float, save, report = () => {}, snap = false }) {
+  let current = { ...bounds }, generation = 0, readVersion = 0, placing = false, disposed = false, timer, docked;
   const alive = () => !disposed && !win.isDestroyed();
   async function remember() {
     if (!alive() || placing || !win.isVisible() || win.isMinimized?.() || win.isFullScreen?.()) return current;
@@ -67,14 +68,42 @@ function consolePlacement(win, { bounds, backend, areas, readBounds, float, save
     clearTimeout(timer);
     if (alive()) win.hide();
   }
+  // After a drag settles, dock to a nearby left/right screen edge (6px gap),
+  // or restore the pre-dock height when a docked Console is dragged away.
+  async function settle() {
+    if (!snap) return remember();
+    if (!alive() || placing || !win.isVisible()) return current;
+    const token = generation, isCurrent = () => alive() && !placing && token === generation && win.isVisible();
+    try {
+      const [actual, available] = await Promise.all([readBounds(), areas()]);
+      if (!isCurrent() || !actual || !['x', 'y', 'width', 'height'].every(k => Number.isFinite(actual[k]))) return current;
+      let target;
+      const dock = dockBounds(actual, available);
+      if (dock) {
+        const { side, ...dockedBounds } = dock;
+        if (!docked) docked = { side, restoreHeight: actual.height };
+        docked = { ...docked, side, height: dockedBounds.height };
+        target = dockedBounds;
+      } else if (docked) {
+        const previous = docked; docked = undefined;
+        // A manual resize while docked is kept; only the automatic stretch is undone.
+        if (Math.abs(actual.height - previous.height) <= 1) target = undockBounds(actual, available, previous.restoreHeight);
+      }
+      if (target && !same(target, actual)) {
+        if (backend) await float({ ...target, isCurrent });
+        else win.setBounds(target);
+      }
+    } catch (error) { report(error); }
+    return remember();
+  }
   function scheduleRemember() {
     if (!alive() || placing || !win.isVisible()) return;
-    clearTimeout(timer); timer = setTimeout(() => { void remember(); }, 200);
+    clearTimeout(timer); timer = setTimeout(() => { void settle(); }, snap ? 350 : 200);
   }
   function dispose() { disposed = true; ++generation; clearTimeout(timer); }
   win.on('move', scheduleRemember);
   win.on('resize', scheduleRemember);
   win.once('closed', dispose);
-  return { show, hide, remember, dispose };
+  return { show, hide, remember, settle, dispose, docked: () => docked?.side };
 }
 module.exports = { consolePlacement };
