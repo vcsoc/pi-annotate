@@ -18,7 +18,7 @@ export function advertise(record, directory = registryDirectory()) {
 }
 export function records(directory = registryDirectory()) {
   let names; try { names = readdirSync(directory); } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
-  return names.filter(name => /^[a-f0-9-]{36}\.json$/.test(name)).slice(0, 256).flatMap(name => {
+  return names.filter(name => /^[a-f0-9-]{36}\.json$/.test(name)).flatMap(name => {
     try {
       const file = join(directory, name), stat = lstatSync(file);
       if (!stat.isFile() || stat.size > 16384 || (process.platform !== 'win32' && (stat.uid !== process.getuid() || (stat.mode & 0o077)))) return [];

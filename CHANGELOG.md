@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.2
+
+- Fix `/annotate` incorrectly reporting an active Pi session as unavailable when old registry records pushed it past the first 256 entries.
+
 ## 0.8.1
 
 - Fixed a full-screen flash on every display when Capture starts (and again after marking). The marking overlay and highlight windows briefly showed the Console's dark background before turning transparent. They are now transparent from their first frame.

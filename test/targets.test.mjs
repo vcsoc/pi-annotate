@@ -19,7 +19,7 @@ function batch(id = randomUUID()) {
   image.write('IHDR', 12); image.writeUInt32BE(100, 16); image.writeUInt32BE(80, 20);
   return { id, items: [{ image: image.toString('base64'), comment: 'Change this control', kind: 'rectangle', points: [[0, 0], [.5, .5]], source: 'Test app' }] };
 }
-async function fixture(t, { staleFactory = false, staleDelivery = false } = {}) {
+async function fixture(t, { staleFactory = false, staleDelivery = false, ids = randomUUID } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'annotate-routing-'));
   const directory = join(root, 'registry'), instances = [], spawned = [];
   t.after(async () => { for (const instance of instances) await instance.events.get('session_shutdown')(); rmSync(root, { recursive: true, force: true }); });
@@ -39,6 +39,7 @@ async function fixture(t, { staleFactory = false, staleDelivery = false } = {}) 
           child.kill = () => { child.killed = true; child.exitCode = 0; child.emit('close', 0, null); };
           spawned.push(child); return child;
         } };
+        if (name === 'node:crypto') return { randomUUID: ids };
         if (name === './dependencies.mjs') return { ensureDependencies: async () => '/not-launched/electron' };
         // Simulate a legacy module still cached by a long-lived Pi process.
         const legacy = { ...bridge, createBridge: options => bridge.createBridge({ ...options, getInfo: undefined }) };
@@ -57,7 +58,29 @@ async function fixture(t, { staleFactory = false, staleDelivery = false } = {}) 
   }
   return { root, directory, session, spawned };
 }
+test('registry retains destinations beyond 256 records', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'annotate-many-targets-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const ids = Array.from({ length: 300 }, () => randomUUID());
+  for (const id of ids) targets.advertise({ id, url: 'http://127.0.0.1:1', token: 'a'.repeat(64), project: '/project', session: 'session' }, directory);
+  const found = new Set(targets.records(directory).map(record => record.id));
+  assert.equal(found.size, ids.length);
+  assert.ok(ids.every(id => found.has(id)));
+});
 const compiler = { skip: typeof module.stripTypeScriptTypes !== 'function' };
+test('/annotate opens and retargets when live Pi sessions are past 256 stale registry records', compiler, async t => {
+  let id = 0;
+  const f = await fixture(t, { ids: () => `ffffffff-ffff-4fff-8fff-${String(++id).padStart(12, '0')}` });
+  const a = await f.session('A'), b = await f.session('B');
+  for (let i = 0; i < 256; i++) {
+    targets.advertise({ id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, url: 'http://127.0.0.1:1', token: 'a'.repeat(64), project: '/closed', session: 'closed' }, f.directory);
+  }
+  await a.run(); assert.equal(f.spawned.length, 1, a.notices.join('\n'));
+  await b.run(); assert.equal(f.spawned.length, 1);
+  assert.match(b.notices.at(-1), /Console now sends to/);
+  await targets.request(a.record, '/submit', { ...batch(), targetId: b.record.id });
+  assert.equal(a.messages.length, 0); assert.equal(b.messages.length, 1);
+});
 test('running /annotate in another Pi reuses the Console and delivers only to that session and folder', compiler, async t => {
   const f = await fixture(t), a = await f.session('A'), b = await f.session('B');
   assert.equal((await targets.activeTargets(f.directory)).length, 2);
