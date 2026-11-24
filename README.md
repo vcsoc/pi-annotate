@@ -1,4 +1,4 @@
-# Pi Annotate — v0.8.2
+# Pi Annotate — v0.8.3
 
 A floating Console for collecting application screenshots, highlighted areas and notes, then sending the complete batch to your selected active Pi project/session.
 
@@ -54,7 +54,7 @@ Use the top-right **⚙** button to open Settings:
 - **When a mark crosses the app edge:** **Trim** (default) cuts the mark to the app where you started drawing; **Extend** widens the screenshot to include the whole app plus the overflowing part of the mark. On Windows/X11 an extended capture must stay on one display.
 - Every setting has an ⓘ icon with its explanation as a tooltip. The capture shortcut and the Global switch apply immediately; the other settings apply with **Save settings**.
 - **Freehand on the live app:** while marking on screen, switch between **Area** and **Freehand** in the hint bar at the top (or press A/F where the overlay can take focus). The keyboard shortcut reuses the last tool.
-- **Edge docking** (timeline only): drop the Console within 32px of a screen's left or right edge and it docks there, 6px from the edge, at about 60% of the screen height. Drag it away to undock; the height it had before docking is restored unless you resized it while docked. This works on macOS, Windows and X11. On Hyprland and sway, Electron gets no drag events, so use the compositor's own snapping.
+- **Edge docking** (timeline only): drop the Console within 32px of a screen's left or right edge and it docks there, 6px from the edge. Docking keeps the size you resized the panel to (the panel starts at about 60% of the screen height), and that size is remembered across restarts. Drag it away to undock; the height it had before docking is restored unless you resized it while docked. This works on macOS, Windows and X11. On Hyprland and sway, Electron gets no drag events, so use the compositor's own snapping.
 - **Global shortcut** (switch, on by default): on registers the shortcut with the OS/compositor so annotation starts from any app. Off releases the OS binding; the shortcut then works only while the Annotate Console window is focused.
 - **Capture countdown:** **1 second** by default, range **0–30 seconds**, for Capture and Retake buttons. The shortcut remains immediate in either mode.
 - **Maximum annotations:** default **8**, range **1–12**. Capture/Add/Send enforce it; retaking an existing entry remains allowed at capacity. Lowering below your current draft count is refused without discarding anything. The separate 12-item / 24-MiB transport ceilings remain.

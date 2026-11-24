@@ -35,3 +35,6 @@ test('detail popup opens beside the Console, level with the entry, on the side w
   const small = besideBounds({ x: 10, y: 0, width: 320, height: 400 }, [{ x: 0, y: 0, width: 800, height: 500 }], { top: 0 });
   assert.equal(small.height, 488); assert.ok(small.x >= 6 && small.x + small.width <= 794);
 });
+test('switching back to the timeline restores the size the user chose', () => {
+  assert.deepEqual(layoutBounds({ x: 840, y: 200, width: 600, height: 56 }, areas, 'timeline', { size: { width: 400, height: 700 } }), { width: 400, height: 700, x: 1034, y: 194 });
+});

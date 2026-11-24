@@ -20,7 +20,7 @@ function open(page, platform = 'darwin') {
   }
   runInNewContext(factory + `\nwindowFor('${page}', 'Test', {width:800,height:600});`, {
     BrowserWindow, process: { platform }, backend: null, desktopBackdrop: undefined, windows: new Set(), join: (...args) => args.join('/'), __dirname: '/test',
-    initialConsoleBounds: { width: 400, height: 600 }, settings: { consoleLayout: 'timeline' }, TIMELINE_HEIGHT_RATIO: 0.6, consoleLimits: () => ({ min: { width: 280, height: 360 } }), boundsFile: () => '/test', busy: () => false, consoleAreas() {}, ownedWindowBounds() {}, enforceFloating() {}, saveBounds() {}, consolePlacement: () => ({ show: () => calls.push('console') }),
+    initialConsoleBounds: { width: 400, height: 600 }, settings: { consoleLayout: 'timeline' }, consoleLimits: () => ({ min: { width: 280, height: 360 } }), boundsFile: () => '/test', busy: () => false, consoleAreas() {}, ownedWindowBounds() {}, enforceFloating() {}, saveBounds() {}, consolePlacement: () => ({ show: () => calls.push('console') }),
   });
   ready(); return { options, calls, levels, workspaces, focused };
 }

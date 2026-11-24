@@ -8,7 +8,7 @@ const { TOOLBAR_WIDTH, TOOLBAR_HEIGHT, geometry, windowBoxes, selectRegion, nati
 const workflow = import('./workflow.mjs');
 const { loadBounds, saveBounds } = require('./console-size.cjs');
 const { consolePlacement } = require('./console-placement.cjs');
-const { PILL_SIZES, TIMELINE_MIN, TIMELINE_HEIGHT_RATIO, DETAIL_SIZE, layoutBounds, besideBounds } = require('./console-layout.cjs');
+const { PILL_SIZES, TIMELINE_MIN, DETAIL_SIZE, layoutBounds, besideBounds } = require('./console-layout.cjs');
 const { accelerator: hyprlandAccelerator, registerShortcut: registerHyprlandShortcut } = require('./hyprland-shortcut.cjs');
 const { nativeWindows, sourceForWindow } = require('./native-windows.cjs');
 const { captureMacWindow, captureMacRegion } = require('./capture-macos.cjs');
@@ -37,7 +37,7 @@ if (backend || (process.platform === 'linux' && !wayland)) app.commandLine.appen
 const windows = new Set(), delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 let consoleState, initialConsoleBounds, closingConsole = false, shortcutOwner, updatingShortcut = false, recordingShortcut = false;
 // Command pill size state (collapsed bar, open tray or settings) and the timeline's detail popup.
-let pillMode = 'collapsed', detailWindow, detailId;
+let pillMode = 'collapsed', detailWindow, detailId, timelineSize;
 // Last mark tool (Area/Freehand); the keyboard shortcut and the on-screen selector reuse it.
 let captureKind = 'freehand';
 // Drafts keep an unmarked `base` screenshot in memory so marks can be redrawn; it is never sent.
@@ -129,7 +129,7 @@ function closeDetail() { const win = detailWindow; detailWindow = detailId = und
 async function relayoutConsole() {
   if (!consoleState) return;
   const now = await consoleState.remember();
-  await consoleState.resize(layoutBounds(now, await consoleAreas(), settings.consoleLayout, { mode: pillMode }));
+  await consoleState.resize(layoutBounds(now, await consoleAreas(), settings.consoleLayout, { mode: pillMode, size: timelineSize }));
 }
 function status(message) { lastNotice = String(message); if (toolbar && !toolbar.isDestroyed()) toolbar.webContents.send('notice', message); }
 function windowFor(page, title, bounds = { width: TOOLBAR_WIDTH, height: TOOLBAR_HEIGHT }, passive = false) {
@@ -146,10 +146,15 @@ function windowFor(page, title, bounds = { width: TOOLBAR_WIDTH, height: TOOLBAR
       bounds, backend, areas: consoleAreas,
       readBounds: () => ownedWindowBounds(win, backend, process.pid),
       float: placement => enforceFloating(win, backend, process.pid, placement),
-      save: placement => saveBounds(boundsFile(), { ...placement, layout: settings.consoleLayout }, consoleLimits().min),
+      save: placement => {
+        // Remember the user's timeline size so a trip to the pill design does not reset it.
+        if (settings.consoleLayout === 'timeline') timelineSize = { width: placement.width, height: placement.height };
+        saveBounds(boundsFile(), { ...placement, layout: settings.consoleLayout }, consoleLimits().min);
+      },
       report: error => { console.error('Console positioning:', error.message); status(`Console positioning: ${error.message}`); },
       snap: () => settings.consoleLayout === 'timeline',
-      dock: { heightRatio: TIMELINE_HEIGHT_RATIO },
+      // Docking snaps to the edge only; a resized size is kept and persisted.
+      dock: { keepHeight: true },
       limits: consoleLimits,
     });
   }
@@ -686,6 +691,7 @@ app.whenReady().then(async () => {
   // Timeline windows keep user-resized bounds; the pill always starts collapsed.
   // Bounds saved before designs existed (no layout) get the new default placement.
   const { layout: storedLayout, ...storedBounds } = stored;
+  if (storedLayout === 'timeline') timelineSize = { width: storedBounds.width, height: storedBounds.height };
   initialConsoleBounds = storedLayout === 'timeline' && settings.consoleLayout === 'timeline' ? storedBounds : layoutBounds(storedBounds, areas, settings.consoleLayout, { initial: !storedLayout });
   let shortcutError;
   try { shortcutOwner = await registerCaptureShortcut(captureShortcut()); }

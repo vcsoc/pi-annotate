@@ -27,7 +27,8 @@ function timelineSize(area) {
  * `initial` places a fresh timeline docked right and centred vertically, and a
  * fresh pill top-centre. A timeline near a side edge stays docked to it.
  */
-function layoutBounds(bounds, areas, layout, { mode = 'collapsed', initial = false } = {}) {
+// `size` restores a timeline size the user chose earlier (e.g. after visiting the pill).
+function layoutBounds(bounds, areas, layout, { mode = 'collapsed', initial = false, size: remembered } = {}) {
   const area = (finite(bounds) && areaFor({ width: 1, height: 1, ...bounds }, areas)) || areaFor({ x: 0, y: 0, width: 1, height: 1 }, areas);
   if (!area) throw new Error('No display work area is available');
   if (layout === 'pill') {
@@ -35,7 +36,10 @@ function layoutBounds(bounds, areas, layout, { mode = 'collapsed', initial = fal
     if (initial || !finite(bounds)) return fitIn({ ...size, x: area.x + (area.width - size.width) / 2, y: area.y + 12 }, area);
     return fitIn({ ...size, x: bounds.x, y: bounds.y }, area);
   }
-  const size = timelineSize(area);
+  const fallback = timelineSize(area);
+  const size = remembered && Number.isFinite(remembered.width) && Number.isFinite(remembered.height)
+    ? { width: Math.min(Math.max(remembered.width, 280), area.width - 2 * SNAP_GAP), height: Math.min(Math.max(remembered.height, 360), area.height - 2 * SNAP_GAP) }
+    : fallback;
   const right = area.x + area.width - SNAP_GAP - size.width;
   if (initial || !finite(bounds)) return { ...size, x: Math.round(right), y: Math.round(area.y + (area.height - size.height) / 2) };
   const nearLeft = bounds.x - area.x <= SNAP_THRESHOLD;

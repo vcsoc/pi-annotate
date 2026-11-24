@@ -56,3 +56,19 @@ test('snap is opt-in: placement without it never moves the window', async t => {
   t.after(() => state.dispose());
   await state.settle(); assert.deepEqual(set, []);
 });
+test('docking keeps a user-resized height and only snaps to the edge', () => {
+  assert.deepEqual(dockBounds({ x: 1060, y: 120, width: 360, height: 700 }, areas, { keepHeight: true }), { side: 'right', x: 1440 - 6 - 360, y: 120, width: 360, height: 700 });
+  // Too tall for the screen: clamped inside the work area with the gap.
+  assert.deepEqual(dockBounds({ x: 10, y: 0, width: 320, height: 2000 }, areas, { keepHeight: true }), { side: 'left', x: 6, y: 31, width: 320, height: 863 });
+});
+test('resizing a docked Console persists the new size instead of snapping back', async t => {
+  const win = new EventEmitter(); let bounds = { x: 1114, y: 200, width: 320, height: 525 }; const set = [], saved = [];
+  Object.assign(win, { isDestroyed: () => false, isVisible: () => true, setBounds: b => { set.push({ ...b }); bounds = { ...b }; } });
+  const state = consolePlacement(win, { bounds, areas: async () => areas, readBounds: async () => bounds, save: b => saved.push({ ...b }), snap: true, dock: { keepHeight: true } });
+  t.after(() => state.dispose());
+  await state.settle(); assert.equal(state.docked(), 'right');
+  // User drags the bottom edge and the left edge: taller and wider.
+  bounds = { x: 1014, y: 200, width: 420, height: 640 }; await state.settle();
+  assert.deepEqual(saved.at(-1), { x: 1014, y: 200, width: 420, height: 640 });
+  assert.equal(set.length, 0);
+});

@@ -19,7 +19,8 @@ function areaFor(bounds, areas) {
  * Docked bounds for a window released near a side edge, or undefined when it
  * is not near one. A window pushed past the edge counts as near it.
  */
-function dockBounds(bounds, areas, { gap = SNAP_GAP, threshold = SNAP_THRESHOLD, heightRatio } = {}) {
+// keepHeight: snap only to the side edge and keep the user's (resized) height.
+function dockBounds(bounds, areas, { gap = SNAP_GAP, threshold = SNAP_THRESHOLD, heightRatio, keepHeight = false } = {}) {
   const area = areaFor(bounds, areas);
   if (!area) return;
   const left = bounds.x - area.x, right = area.x + area.width - (bounds.x + bounds.width);
@@ -28,9 +29,9 @@ function dockBounds(bounds, areas, { gap = SNAP_GAP, threshold = SNAP_THRESHOLD,
   const width = Math.round(Math.min(bounds.width, area.width - 2 * gap));
   const full = area.height - 2 * gap;
   // With a height ratio the panel keeps the dropped vertical position; otherwise it spans the full height.
-  const height = Math.round(heightRatio ? Math.min(full, Math.max(Math.min(360, full), area.height * heightRatio)) : full);
+  const height = Math.round(keepHeight ? Math.min(full, bounds.height) : heightRatio ? Math.min(full, Math.max(Math.min(360, full), area.height * heightRatio)) : full);
   const x = Math.round(side === 'left' ? area.x + gap : area.x + area.width - gap - width);
-  const y = Math.round(heightRatio ? Math.min(Math.max(bounds.y, area.y + gap), area.y + area.height - gap - height) : area.y + gap);
+  const y = Math.round(keepHeight || heightRatio ? Math.min(Math.max(bounds.y, area.y + gap), area.y + area.height - gap - height) : area.y + gap);
   return { side, x, y, width, height };
 }
 

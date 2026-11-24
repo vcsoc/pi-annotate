@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3
+
+- The Console keeps the size you resize it to, across restarts. Docking to a screen edge used to reset the height to 60% of the screen after every resize. It now only snaps to the edge and keeps your size. 60% is just the starting size. Switching to the command pill and back also restores your timeline size.
+
 ## 0.8.2
 
 - Fix `/annotate` incorrectly reporting an active Pi session as unavailable when old registry records pushed it past the first 256 entries.
